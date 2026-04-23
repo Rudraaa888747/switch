@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# Switch
-=======
 <div align="center">
 
 <br/>
@@ -553,4 +550,3 @@ Built with ❤️ using &nbsp;**React** · **TypeScript** · **Supabase** · **T
 <img src="https://img.shields.io/github/stars/Rudraaa888747/switch?style=social" alt="GitHub Stars"/>
 
 </div>
->>>>>>> 700dad1 (Initial clean commit)
