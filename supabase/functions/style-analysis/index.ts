@@ -13,6 +13,8 @@ serve(async (req) => {
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
 
     const systemPrompt = `Analyze style in JSON: { "skinTone": "...", "bodyStructure": "...", "styleCategory": "...", "colorPalette": ["#hex1"], "recommendations": ["tip1"] }`;
+    const mimeTypeMatch = imageBase64.match(/^data:([^;]+);/);
+    const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
     const base64Data = imageBase64.split(',')[1] || imageBase64;
 
     const response = await fetch(
@@ -21,7 +23,7 @@ serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }, { inlineData: { mimeType: "image/jpeg", data: base64Data } }] }],
+          contents: [{ parts: [{ text: systemPrompt }, { inlineData: { mimeType: mimeType, data: base64Data } }] }],
         }),
       }
     );

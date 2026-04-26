@@ -13,17 +13,25 @@ const noOpLock = async <R>(_name: string, _acquireTimeout: number, fn: () => Pro
   return fn();
 };
 
-const createSupabaseClient = () => createClient<Database>(
-  SUPABASE_URL, 
-  SUPABASE_PUBLISHABLE_KEY,
-  {
+const createSupabaseClient = () => {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error('Missing Supabase environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY must be defined');
+  }
+
+  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       lock: noOpLock,
-    }
-  }
-);
+    },
+  });
+};
+
+type SupabaseClientCache = {
+  _supabaseClient?: ReturnType<typeof createSupabaseClient>;
+};
+
+const globalScope = globalThis as unknown as SupabaseClientCache;
 
 // Cache the client instance in development to avoid multiple instances during HMR
-export const supabase = import.meta.env.DEV 
-  ? ((globalThis as any)._supabaseClient ??= createSupabaseClient())
+export const supabase = import.meta.env.DEV
+  ? (globalScope._supabaseClient ??= createSupabaseClient())
   : createSupabaseClient();

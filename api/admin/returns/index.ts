@@ -5,11 +5,13 @@ interface ReturnRequestRow {
   id?: string;
   user_id?: string;
   order_id?: string;
+  status?: string;
+  refund_amount?: number;
   [key: string]: unknown;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isAdminApiAuthorized(req.headers)) {
+  if (!(await isAdminApiAuthorized(req.headers))) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -84,19 +86,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { id, status, refund_amount, estimated_refund_date } = req.body || {};
+      const {
+        id,
+        status,
+        refund_amount,
+        estimated_refund_date,
+        admin_note,
+        process_wallet_refund,
+        wallet_user_id,
+        wallet_reference_id,
+        wallet_description,
+      } = req.body || {};
 
-      if (!id || !status) {
-        return res.status(400).json({ error: 'id and status are required' });
+      if (!id) {
+        return res.status(400).json({ error: 'id is required' });
+      }
+
+      const { data: existingReturn, error: existingReturnError } = await supabaseAdmin
+        .from('return_requests')
+        .select('id, user_id, status, refund_amount')
+        .eq('id', id)
+        .maybeSingle<ReturnRequestRow>();
+
+      if (existingReturnError) {
+        return res.status(500).json({ error: existingReturnError.message, code: existingReturnError.code });
+      }
+
+      if (!existingReturn) {
+        return res.status(404).json({ error: 'Return request not found' });
       }
 
       const updateData: Record<string, unknown> = {
-        status,
         updated_at: new Date().toISOString(),
       };
 
+      if (status !== undefined) updateData.status = status;
       if (refund_amount !== undefined) updateData.refund_amount = refund_amount;
       if (estimated_refund_date !== undefined) updateData.estimated_refund_date = estimated_refund_date;
+      if (admin_note !== undefined) updateData.admin_note = admin_note;
+
+      if (process_wallet_refund) {
+        if (!wallet_user_id || refund_amount === undefined) {
+          return res.status(400).json({ error: 'wallet_user_id and refund_amount are required for wallet refunds' });
+        }
+
+        const walletReferenceId = wallet_reference_id ?? String(id);
+        const { data: existingWalletCredit, error: existingWalletCreditError } = await supabaseAdmin
+          .from('wallet_transactions')
+          .select('id')
+          .eq('reference_id', walletReferenceId)
+          .eq('type', 'credit')
+          .eq('source', 'refund')
+          .limit(1);
+
+        if (existingWalletCreditError) {
+          return res.status(500).json({ error: existingWalletCreditError.message, code: existingWalletCreditError.code });
+        }
+
+        if (!existingWalletCredit || existingWalletCredit.length === 0) {
+          const { error: walletError } = await supabaseAdmin.rpc('add_wallet_credit', {
+            p_user_id: wallet_user_id,
+            p_amount: refund_amount,
+            p_source: 'refund',
+            p_reference_id: walletReferenceId,
+            p_description: wallet_description ?? `Refund for return request #${String(id).slice(0, 8)}`,
+          });
+
+          if (walletError) {
+            return res.status(500).json({ error: walletError.message, code: walletError.code });
+          }
+        }
+      }
 
       const { data, error } = await supabaseAdmin
         .from('return_requests')

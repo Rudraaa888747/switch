@@ -13,7 +13,7 @@ interface UserCountRow {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isAdminApiAuthorized(req.headers)) {
+  if (!(await isAdminApiAuthorized(req.headers))) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

@@ -5,6 +5,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type IncomingMessage = {
+  role: "assistant" | "user" | string;
+  content: string;
+};
+
+type ChatRequestBody = {
+  messages?: IncomingMessage[];
+};
+
 const PRODUCTS_CATALOG = [
   { id: 'men-1', name: 'Black Slim-Fit Cotton Shirt', price: 1299, category: 'men', colors: ['Black', 'Navy'], occasion: ['Casual', 'Office', 'Party'] },
   { id: 'men-2', name: 'White Formal Shirt', price: 1499, category: 'men', colors: ['White', 'Cream'], occasion: ['Formal', 'Office', 'Wedding'] },
@@ -24,10 +33,11 @@ const SYSTEM_PROMPT = `You are Switch AI, a friendly shopping assistant. Always 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const { messages } = await req.json();
+    const { messages } = (await req.json()) as ChatRequestBody;
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
 
+    const safeMessages = Array.isArray(messages) ? messages : [];
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -36,9 +46,9 @@ serve(async (req) => {
         body: JSON.stringify({
           contents: [
             { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-            ...messages.map((m: any) => ({
+            ...safeMessages.map((m) => ({
               role: m.role === "assistant" ? "model" : "user",
-              parts: [{ text: m.content }],
+              parts: [{ text: m.content ?? '' }],
             })),
           ],
         }),

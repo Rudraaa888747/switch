@@ -9,6 +9,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { getAdminApiHeaders } from '@/lib/adminApi';
 
 interface UserProfile {
   id: string;
@@ -31,11 +32,10 @@ const AdminUsers = () => {
   const fetchUsers = async () => {
     try {
       try {
+        const adminHeaders = await getAdminApiHeaders();
         const response = await fetch('/api/admin/users', {
           method: 'GET',
-          headers: {
-            'x-admin-token': import.meta.env.VITE_ADMIN_API_TOKEN || 'demo123',
-          },
+          headers: adminHeaders,
         });
 
         const responseText = await response.text();

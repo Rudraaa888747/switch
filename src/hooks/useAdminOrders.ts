@@ -3,13 +3,12 @@ import { keepPreviousData, QueryClient, useQuery, useQueryClient } from '@tansta
 import { supabase } from '@/integrations/supabase/client';
 import { supabaseRestRequest, supabaseRestSelect } from '@/integrations/supabase/publicRest';
 import {
-  applyRealtimeOrderChange,
   groupOrders,
   normalizeOrders,
   OrderGroup,
-  toDatabaseOrderStatus,
   upsertOrderGroup,
 } from '@/lib/orders';
+import { getAdminApiHeaders } from '@/lib/adminApi';
 
 const ADMIN_ORDERS_PAGE_SIZE = 20;
 type RawOrderRow = Record<string, unknown> & { id: string; items?: Record<string, unknown>[] };
@@ -37,76 +36,119 @@ const normalizeAdminStatus = (status?: string) => {
   return status;
 };
 
+const sanitizePostgrestSearch = (value: string) => value.replace(/[(),]/g, ' ').trim();
+
 const buildAdminOrdersQuery = async ({
   page,
   pageSize = ADMIN_ORDERS_PAGE_SIZE,
   search = '',
   status = 'all',
 }: AdminOrdersFilters): Promise<AdminOrdersPage> => {
-  const normalizedSearch = search.trim();
+  const normalizedSearch = sanitizePostgrestSearch(search);
   const normalizedStatus = normalizeAdminStatus(status);
-  const offset = Math.max(page - 1, 0) * pageSize;
-  const params = new URLSearchParams({
-    select: '*',
-    order: 'created_at.desc',
-    offset: String(offset),
-    limit: String(pageSize),
-  });
-
-  if (normalizedStatus) {
-    params.set('status', `eq.${toDatabaseOrderStatus('legacy', normalizedStatus)}`);
-  }
-
-  if (normalizedSearch) {
-    params.set('or', `(order_id.ilike.%${normalizedSearch}%,customer_name.ilike.%${normalizedSearch}%)`);
-  }
-
-  const { data: rawOrders, response } = await supabaseRestRequest<RawOrderRow[]>('orders', {
-    method: 'GET',
-    searchParams: params,
-    headers: {
-      Prefer: 'count=estimated',
-      Range: `${offset}-${offset + pageSize - 1}`,
-    },
-  });
-
-  const orders = (rawOrders || []) as RawOrderRow[];
-
-  // For modern orders, we need to fetch items from the order_items table
-  const modernOrderIds = orders
-    .filter(o => !o.items || (Array.isArray(o.items) && o.items.length === 0))
-    .map(o => o.id);
-
-  let allItems: RawOrderItemRow[] = [];
-  if (modernOrderIds.length > 0) {
-    const itemsParams = new URLSearchParams({
-      select: '*',
-      order_id: `in.(${modernOrderIds.join(',')})`,
+  try {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
     });
-    allItems = await supabaseRestSelect<RawOrderItemRow[]>('order_items', itemsParams);
-  }
 
-  const mergedOrders = orders.map(order => {
-    if (modernOrderIds.includes(order.id)) {
-      const orderItems = allItems.filter(item => item.order_id === order.id);
+    if (normalizedStatus) {
+      params.set('status', normalizedStatus);
+    }
+
+    if (normalizedSearch) {
+      params.set('search', normalizedSearch);
+    }
+
+    const response = await fetch(`/api/admin/orders?${params.toString()}`, {
+      method: 'GET',
+      headers: await getAdminApiHeaders(),
+    });
+
+    const responseText = await response.text();
+    const parsed = responseText
+      ? (JSON.parse(responseText) as {
+          data?: { orders?: RawOrderRow[]; totalCount?: number };
+          error?: string;
+        })
+      : {};
+
+    if (!response.ok) {
+      throw new Error(parsed.error || `Failed to load admin orders (HTTP ${response.status})`);
+    }
+
+    const mergedOrders = (parsed.data?.orders || []) as RawOrderRow[];
+    const normalizedOrders = groupOrders(normalizeOrders(mergedOrders));
+    const totalCount = Number(parsed.data?.totalCount ?? normalizedOrders.length);
+
+    return {
+      orders: normalizedOrders,
+      totalCount: Number.isFinite(totalCount) ? totalCount : normalizedOrders.length,
+      page,
+      pageSize,
+    };
+  } catch {
+    const offset = Math.max(page - 1, 0) * pageSize;
+    const params = new URLSearchParams({
+      select: '*',
+      order: 'created_at.desc',
+      offset: String(offset),
+      limit: String(pageSize),
+    });
+
+    if (normalizedStatus) {
+      params.set('status', `eq.${normalizedStatus.toLowerCase().replace(/\s+/g, '_')}`);
+    }
+
+    if (normalizedSearch) {
+      params.set('or', `(order_id.ilike.%${normalizedSearch}%,customer_name.ilike.%${normalizedSearch}%)`);
+    }
+
+    const { data: rawOrders, response } = await supabaseRestRequest<RawOrderRow[]>('orders', {
+      method: 'GET',
+      searchParams: params,
+      headers: {
+        Prefer: 'count=estimated',
+        Range: `${offset}-${offset + pageSize - 1}`,
+      },
+    });
+
+    const orders = (rawOrders || []) as RawOrderRow[];
+    const modernOrderIds = orders
+      .filter((order) => !order.items || (Array.isArray(order.items) && order.items.length === 0))
+      .map((order) => order.id);
+
+    let allItems: RawOrderItemRow[] = [];
+    if (modernOrderIds.length > 0) {
+      const itemsParams = new URLSearchParams({
+        select: '*',
+        order_id: `in.(${modernOrderIds.join(',')})`,
+      });
+      allItems = await supabaseRestSelect<RawOrderItemRow[]>('order_items', itemsParams);
+    }
+
+    const mergedOrders = orders.map((order) => {
+      if (!modernOrderIds.includes(order.id)) {
+        return order;
+      }
+
       return {
         ...order,
-        items: orderItems,
+        items: allItems.filter((item) => item.order_id === order.id),
       };
-    }
-    return order;
-  });
+    });
 
-  const normalizedOrders = groupOrders(normalizeOrders(mergedOrders));
-  const contentRange = response.headers.get('content-range');
-  const totalCount = contentRange ? Number(contentRange.split('/')[1] || normalizedOrders.length) : normalizedOrders.length;
+    const normalizedOrders = groupOrders(normalizeOrders(mergedOrders));
+    const contentRange = response.headers.get('content-range');
+    const totalCount = contentRange ? Number(contentRange.split('/')[1] || normalizedOrders.length) : normalizedOrders.length;
 
-  return {
-    orders: normalizedOrders,
-    totalCount: Number.isFinite(totalCount) ? totalCount : normalizedOrders.length,
-    page,
-    pageSize,
-  };
+    return {
+      orders: normalizedOrders,
+      totalCount: Number.isFinite(totalCount) ? totalCount : normalizedOrders.length,
+      page,
+      pageSize,
+    };
+  }
 };
 
 export const getAdminOrdersQueryKey = ({ page, pageSize = ADMIN_ORDERS_PAGE_SIZE, search = '', status = 'all' }: AdminOrdersFilters) => [

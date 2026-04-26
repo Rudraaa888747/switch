@@ -1,13 +1,19 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/data/products';
 import { getProductImage } from '@/lib/utils';
 
 const Cart = () => {
   const { items, updateQuantity, removeFromCart, totalPrice, totalItems } = useCart();
+  const { isAuthenticated, isAuthReady } = useAuth();
+
+  if (isAuthReady && !isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
 
   if (items.length === 0) {
     return (

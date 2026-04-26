@@ -8,12 +8,28 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const { selectedProduct, allProducts } = await req.json();
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+type OutfitMatchingRequest = {
+    selectedProduct?: { id?: string; [key: string]: unknown };
+    allProducts?: Array<{ id?: string; [key: string]: unknown }>;
+  };
 
-    const systemPrompt = `Return matching product IDs in JSON: { "matchingIds": ["id1"], "reasoning": "..." }`;
-    const userPrompt = `Selected: ${JSON.stringify(selectedProduct)}. Catalog: ${JSON.stringify(allProducts.filter((p: any) => p.id !== selectedProduct.id))}`;
+  const { selectedProduct, allProducts } = (await req.json()) as OutfitMatchingRequest;
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+
+  if (!selectedProduct || typeof selectedProduct !== 'object' || typeof selectedProduct.id !== 'string' || selectedProduct.id.trim() === '') {
+    return new Response(JSON.stringify({ error: 'Invalid request: selectedProduct is required and must contain a valid id.' }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const safeProducts = Array.isArray(allProducts) ? allProducts : [];
+  const filterTargetId = selectedProduct.id;
+  const filteredCatalog = safeProducts.filter((p) => typeof p === 'object' && p !== null && p.id && p.id !== filterTargetId);
+
+  const systemPrompt = `Return matching product IDs in JSON: { "matchingIds": ["id1"], "reasoning": "..." }`;
+  const userPrompt = `Selected: ${JSON.stringify(selectedProduct)}. Catalog: ${JSON.stringify(filteredCatalog)}`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,

@@ -14,6 +14,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { supabaseRestDelete, supabaseRestSelect } from '@/integrations/supabase/publicRest';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { getAdminApiHeaders } from '@/lib/adminApi';
 
 interface Review {
   id: string;
@@ -65,11 +66,10 @@ const AdminReviews = () => {
       let fetchedProducts: ProductLite[] = [];
 
       try {
+        const adminHeaders = await getAdminApiHeaders();
         const response = await fetch('/api/admin/reviews', {
           method: 'GET',
-          headers: {
-            'x-admin-token': import.meta.env.VITE_ADMIN_API_TOKEN || 'demo123',
-          },
+          headers: adminHeaders,
         });
 
         const result = await parseApiResponse(response);
@@ -122,11 +122,10 @@ const AdminReviews = () => {
   const deleteReview = async (reviewId: string) => {
     try {
       try {
+        const adminHeaders = await getAdminApiHeaders();
         const response = await fetch(`/api/admin/reviews?id=${encodeURIComponent(reviewId)}`, {
           method: 'DELETE',
-          headers: {
-            'x-admin-token': import.meta.env.VITE_ADMIN_API_TOKEN || 'demo123',
-          },
+          headers: adminHeaders,
         });
 
         const result = await parseApiResponse(response);
@@ -278,7 +277,7 @@ const AdminReviews = () => {
             ))
           ) : filteredReviews.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              No reviews found
+              No reviews found matching filters
             </div>
           ) : (
             filteredReviews.map((review, index) => (

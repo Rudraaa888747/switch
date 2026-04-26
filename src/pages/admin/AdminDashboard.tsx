@@ -29,24 +29,7 @@ import {
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#10b981', '#f59e0b', '#ef4444'];
 
-// Mock sales data for charts
-const salesData = [
-  { name: 'Jan', sales: 45000 },
-  { name: 'Feb', sales: 52000 },
-  { name: 'Mar', sales: 48000 },
-  { name: 'Apr', sales: 61000 },
-  { name: 'May', sales: 55000 },
-  { name: 'Jun', sales: 67000 },
-  { name: 'Jul', sales: 72000 },
-];
-
-const categoryData = [
-  { name: 'Shirts', value: 35 },
-  { name: 'Pants', value: 25 },
-  { name: 'Dresses', value: 20 },
-  { name: 'Jackets', value: 12 },
-  { name: 'Accessories', value: 8 },
-];
+// Charts will use data from the useAdminOverview hook
 
 const AdminDashboard = () => {
   const { data, isLoading } = useAdminOverview();
@@ -54,11 +37,16 @@ const AdminDashboard = () => {
     totalProducts: products.length,
     totalOrders: 0,
     totalRevenue: 0,
+    totalProfit: 0,
     totalReviews: 0,
     lowStockCount: 3,
     recentOrders: [],
+    monthlyData: [],
+    categoryData: [],
   };
   const recentOrders = stats.recentOrders;
+  const salesData = stats.monthlyData;
+  const categoryData = stats.categoryData;
 
   const statCards = useMemo(() => [
     {
@@ -158,13 +146,21 @@ const AdminDashboard = () => {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number) => formatPrice(value)}
                 />
                 <Line
                   type="monotone"
-                  dataKey="sales"
+                  dataKey="revenue"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
                   dot={{ fill: 'hsl(var(--primary))' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  dot={{ fill: '#10b981' }}
                 />
               </LineChart>
             </ResponsiveContainer>

@@ -144,7 +144,7 @@ const AIAssistant = () => {
               </div>
               <div>
                 <h1 className="text-lg font-semibold">AI Shopping Assistant</h1>
-                <p className="text-sm text-muted-foreground">Ask me anything about fashion</p>
+                <p className="text-sm text-muted-foreground">Ask me anything about fashion <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded ml-2 font-bold uppercase tracking-tighter">Simulated</span></p>
               </div>
             </div>
           </div>

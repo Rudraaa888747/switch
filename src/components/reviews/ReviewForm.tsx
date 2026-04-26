@@ -70,10 +70,14 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
       const sentiment = content ? analyzeSentiment(content) : 'neutral';
 
       // Check for verified purchase using RPC function
-      const { data: isPurchased } = await (supabase as any).rpc('check_user_purchased_product', {
+      const { data: isPurchased, error: purchaseError } = await supabase.rpc<boolean>('check_user_purchased_product', {
         p_user_id: userId,
-        p_product_id: productId
+        p_product_id: productId,
       });
+
+      if (purchaseError) {
+        console.warn('Verified purchase check warning:', purchaseError);
+      }
 
       const { data, error } = await supabase
         .from('reviews')

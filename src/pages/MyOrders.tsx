@@ -21,10 +21,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn, getProductImage, normalizeImageUrl } from '@/lib/utils';
 import { products } from '@/data/products';
-import { OrderGroup, toDatabaseOrderStatus } from '@/lib/orders';
+import { OrderGroup } from '@/lib/orders';
 import { getUserOrdersQueryKey, useUserOrders } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
-import { supabaseRestUpdate } from '@/integrations/supabase/publicRest';
 import { useQueryClient } from '@tanstack/react-query';
 import ReturnItemsModal from '@/components/orders/ReturnItemsModal';
 import { useUserReturns } from '@/hooks/useReturns';
@@ -202,7 +201,7 @@ const MyOrders = () => {
   const { user, supabaseUser, session, isAuthenticated, isAuthReady } = useAuth();
   const userId = supabaseUser?.id || user?.id;
   const accessToken = session?.access_token ?? null;
-  const { data: orders = [], isLoading, error } = useUserOrders(userId);
+  const { data: orders = [], isLoading, error } = useUserOrders(userId, accessToken);
   const { data: returns = [], error: returnsError } = useUserReturns(userId, accessToken);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
@@ -263,41 +262,32 @@ const MyOrders = () => {
     if (!userId) return;
 
     try {
-      const cancelledAt = new Date().toISOString();
-      const statusValue = toDatabaseOrderStatus(order.schema_version, 'Cancelled');
-      const params = new URLSearchParams({
-        user_id: `eq.${userId}`,
-        ...(order.schema_version === 'modern' && order.order_id
-          ? { order_id: `eq.${order.order_id}` }
-          : { id: `eq.${order.source_id}` }),
+      const { data: cancelResult, error: rpcError } = await supabase.rpc('handle_order_cancellation', {
+        p_order_id: order.order_id || order.source_id,
+        p_user_id: userId,
+        p_cancelled_by: 'user'
       });
 
-      await supabaseRestUpdate('orders', {
-        status: statusValue,
-        cancelled_at: cancelledAt,
-      }, params, accessToken);
+      if (rpcError) throw rpcError;
+      if (!cancelResult.success) throw new Error(cancelResult.error);
 
-      queryClient.setQueryData(getUserOrdersQueryKey(userId), (current: OrderGroup[] | undefined) =>
-        (current || []).map((existing) =>
-          existing.id === order.id
-            ? {
-                ...existing,
-                status: 'Cancelled',
-                cancelled_at: cancelledAt,
-              }
-            : existing
-        )
-      );
+      queryClient.invalidateQueries({ queryKey: getUserOrdersQueryKey(userId) });
+      
+      // Also invalidate wallet balance
+      queryClient.invalidateQueries({ queryKey: ['wallet-profile-balance', userId] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-transactions', userId] });
 
       toast({
         title: 'Order Cancelled',
-        description: 'Your order has been cancelled successfully.',
+        description: cancelResult.refunded_amount > 0 
+          ? `Order cancelled and ${formatPrice(cancelResult.refunded_amount)} refunded to your wallet.`
+          : 'Your order has been cancelled successfully.',
       });
     } catch (cancelError) {
       console.error('Error cancelling order:', cancelError);
       toast({
         title: 'Error',
-        description: 'Failed to cancel order',
+        description: cancelError instanceof Error ? cancelError.message : 'Failed to cancel order',
         variant: 'destructive',
       });
     }

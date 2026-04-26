@@ -2,27 +2,28 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, ArrowRight, AlertCircle } from 'lucide-react';
+import { useAdmin } from '@/contexts/AdminContext';
 
 const AdminLogin = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { adminLogin, isAdminAuthenticated, isLoading } = useAdmin();
 
-  // Auto-redirect removed to allow easy demonstration of the login form UI
-  /* 
-  if (localStorage.getItem('adminAuth') === 'true') {
+  if (isAdminAuthenticated) {
     return <Navigate to="/admin/dashboard" replace />;
   }
-  */
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'demo123' && password === 'demo123') {
-      localStorage.setItem('adminAuth', 'true');
+    setError('');
+
+    const result = await adminLogin(username, password);
+    if (result.success) {
       navigate('/admin/dashboard');
     } else {
-      setError('Invalid username or password');
+      setError(result.error || 'Invalid username or password');
     }
   };
 
@@ -91,9 +92,10 @@ const AdminLogin = () => {
 
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-primary/25 group"
           >
-            Sign In
+            {isLoading ? 'Signing In...' : 'Sign In'}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </form>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { AuthError, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
@@ -35,6 +35,7 @@ export interface User {
   name: string;
   phone?: string;
   avatar?: string;
+  walletBalance: number;
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';
   addresses: Address[];
@@ -102,7 +103,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const cached = window.localStorage.getItem(`${PROFILE_CACHE_KEY_PREFIX}${userId}`);
       if (!cached) return null;
-      const parsed = JSON.parse(cached) as { display_name?: string | null; avatar_url?: string | null; cached_at?: string };
+      const parsed = JSON.parse(cached) as {
+        display_name?: string | null;
+        avatar_url?: string | null;
+        wallet_balance?: number;
+        cached_at?: string;
+      };
       const cachedAt = parsed.cached_at ? new Date(parsed.cached_at).getTime() : 0;
       if (Date.now() - cachedAt > 15 * 60_000) {
         window.localStorage.removeItem(`${PROFILE_CACHE_KEY_PREFIX}${userId}`);
@@ -114,7 +120,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const storeCachedProfile = (userId: string, profile: { display_name?: string | null; avatar_url?: string | null }) => {
+  const storeCachedProfile = (
+    userId: string,
+    profile: { display_name?: string | null; avatar_url?: string | null; wallet_balance?: number }
+  ) => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(
       `${PROFILE_CACHE_KEY_PREFIX}${userId}`,
@@ -127,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   type SetUserAction = User | null | ((prev: User | null) => User | null);
 
-  const setUser = (next: SetUserAction) => {
+  const setUser = useCallback((next: SetUserAction) => {
     setUserState((prev) => {
       const nextState = typeof next === 'function' ? (next as (prev: User | null) => User | null)(prev) : next;
       if (typeof window === 'undefined') return nextState;
@@ -140,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return nextState;
     });
-  };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -169,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: session.user.id,
         email: session.user.email || '',
         name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '',
+        walletBalance: 0,
         addresses: [],
         orders: [],
         wishlistCount: 0,
@@ -188,13 +198,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...baseUser,
         name: formatDisplayName(cachedProfile?.display_name, baseUser.name),
         avatar: cachedProfile?.avatar_url ?? baseUser.avatar,
+        walletBalance: cachedProfile?.wallet_balance ?? baseUser.walletBalance,
       };
 
       // Don't block UI on profile fetch; ensure we at least have a base user immediately.
       setUser((prev) => (prev?.id === hydratedUser.id ? { ...prev, ...hydratedUser } : hydratedUser));
       void queryClient.prefetchQuery({
         queryKey: getUserOrdersQueryKey(session.user.id),
-        queryFn: () => fetchUserOrders(session.user.id),
+        queryFn: () => fetchUserOrders(session.user.id, session.access_token),
         staleTime: 30_000,
       });
 
@@ -204,7 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('display_name, avatar_url')
+          .select('display_name, avatar_url, wallet_balance')
           .eq('user_id', session.user.id)
           .maybeSingle();
 
@@ -219,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   ...prev,
                   name: formatDisplayName(profile.display_name, prev.name),
                   avatar: profile.avatar_url ?? prev.avatar,
+                  walletBalance: profile.wallet_balance ?? prev.walletBalance ?? 0,
                 }
               : prev
           );
@@ -260,7 +272,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.clearTimeout(initTimeout);
       subscription.unsubscribe();
     };
-  }, [queryClient]);
+  }, [queryClient, setUser]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
@@ -423,7 +435,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(updatedUser);
       
       try {
-        const updatePayload: any = {};
+        const updatePayload: Partial<{ display_name: string; phone: string }> = {};
         if (data.name !== undefined) updatePayload.display_name = data.name;
         if (data.phone !== undefined) updatePayload.phone = data.phone;
         
@@ -516,6 +528,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

@@ -16,8 +16,13 @@ const WishlistContext = createContext<WishlistContextType | undefined>(undefined
 export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<Product[]>(() => {
     if (typeof window !== 'undefined') {
-      const savedWishlist = localStorage.getItem('switch-wishlist');
-      return savedWishlist ? JSON.parse(savedWishlist) : [];
+      try {
+        const savedWishlist = localStorage.getItem('switch-wishlist');
+        return savedWishlist ? JSON.parse(savedWishlist) : [];
+      } catch {
+        localStorage.removeItem('switch-wishlist');
+        return [];
+      }
     }
     return [];
   });
@@ -72,6 +77,7 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWishlist = () => {
   const context = useContext(WishlistContext);
   if (context === undefined) {

@@ -180,7 +180,7 @@ const Header = () => {
               className="relative"
             >
               <Link
-                to="/cart"
+                to={isAuthenticated ? "/cart" : "/auth"}
                 className="p-2 inline-block"
                 aria-label="Cart"
               >

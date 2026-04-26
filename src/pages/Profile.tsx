@@ -22,6 +22,7 @@ import {
   Bell,
   Shield,
   X,
+  Wallet,
 } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,7 +47,7 @@ import { useUserOrders } from '@/hooks/useOrders';
 import { formatPrice } from '@/data/products';
 
 const Profile = () => {
-  const { user, isAuthenticated, logout, updateProfile, supabaseUser } = useAuth();
+  const { user, isAuthenticated, logout, updateProfile, supabaseUser, session } = useAuth();
   const { totalItems: wishlistCount } = useWishlist();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -63,7 +64,7 @@ const Profile = () => {
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const effectiveUserId = supabaseUser?.id || user?.id;
-  const { data: orders = [], isLoading: isOrdersLoading } = useUserOrders(effectiveUserId);
+  const { data: orders = [], isLoading: isOrdersLoading } = useUserOrders(effectiveUserId, session?.access_token);
   const previewOrders = useMemo(() => orders.slice(0, 3), [orders]);
 
   if (!isAuthenticated || !user) {
@@ -233,17 +234,19 @@ const Profile = () => {
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <CreditCard className="h-8 w-8 text-muted-foreground" />
-                <div>
-                  <p className="text-2xl font-medium">2</p>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Cards
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <Link to="/wallet">
+              <Card className="hover:border-foreground/30 transition-colors cursor-pointer">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <Wallet className="h-8 w-8 text-muted-foreground" />
+                  <div>
+                    <p className="text-2xl font-medium">{formatPrice(user.walletBalance || 0)}</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                      Wallet Balance
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           {/* Main Content Tabs */}
@@ -260,6 +263,12 @@ const Profile = () => {
                 className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
               >
                 Profile
+              </TabsTrigger>
+              <TabsTrigger
+                value="wallet"
+                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
+              >
+                My Wallet
               </TabsTrigger>
               <TabsTrigger
                 value="addresses"
@@ -480,6 +489,39 @@ const Profile = () => {
                       </Button>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Wallet Tab */}
+            <TabsContent value="wallet" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-medium uppercase tracking-widest">
+                  My Wallet
+                </h2>
+                <Link to="/wallet">
+                  <Button variant="outline" size="sm">
+                    View Wallet History
+                  </Button>
+                </Link>
+              </div>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Wallet Balance
+                      </p>
+                      <p className="text-3xl font-semibold mt-1">{formatPrice(user.walletBalance || 0)}</p>
+                    </div>
+                    <div className="rounded-full bg-secondary p-4">
+                      <Wallet className="h-7 w-7 text-foreground" />
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Refunds and cashbacks are stored here automatically. Use your wallet credit during checkout to pay first.
+                  </p>
                 </CardContent>
               </Card>
             </TabsContent>

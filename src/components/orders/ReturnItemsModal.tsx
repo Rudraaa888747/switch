@@ -26,6 +26,7 @@ interface ReturnableOrder {
   order_id?: string;
   source_id: string;
   user_id: string;
+  payment_method?: string | null;
   items: ReturnableOrderItem[];
 }
 
@@ -41,6 +42,9 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
   const [selectedItems, setSelectedItems] = useState<Map<string, number>>(new Map());
   const [reason, setReason] = useState<string>('');
   const [comment, setComment] = useState('');
+  const [refundMethod, setRefundMethod] = useState<'card' | 'upi' | 'cod'>(
+    order.payment_method === 'cod' ? 'cod' : 'card'
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
 
@@ -78,6 +82,7 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
             additional_details: comment || null,
             images: [],
             status: 'requested',
+            refund_method: refundMethod === 'cod' ? 'wallet' : refundMethod,
           },
         ],
         accessToken
@@ -210,6 +215,23 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground ml-1">Refund Method</label>
+                    <Select value={refundMethod} onValueChange={(value) => setRefundMethod(value as typeof refundMethod)}>
+                      <SelectTrigger className="w-full h-12 bg-muted/20 border-border/40 rounded-xl focus:ring-primary">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border">
+                        <SelectItem value="card">Card refund</SelectItem>
+                        <SelectItem value="upi">UPI refund</SelectItem>
+                        <SelectItem value="cod">Cash on Delivery refund</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      COD refunds are credited to your wallet automatically for faster processing.
+                    </p>
                   </div>
 
                   <div className="space-y-2">

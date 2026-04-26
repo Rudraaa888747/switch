@@ -8,6 +8,7 @@ export interface ReturnRequest {
   reason: string;
   comment?: string | null;
   additional_details?: string | null;
+  refund_method?: 'card' | 'upi' | 'wallet' | null;
   images?: string[] | null;
   admin_note?: string | null;
   status:

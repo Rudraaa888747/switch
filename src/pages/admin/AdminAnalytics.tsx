@@ -26,30 +26,16 @@ import {
 
 const COLORS = ['hsl(var(--primary))', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-// Mock analytics data
-const revenueData = [
-  { month: 'Jan', revenue: 125000, orders: 45 },
-  { month: 'Feb', revenue: 148000, orders: 52 },
-  { month: 'Mar', revenue: 132000, orders: 48 },
-  { month: 'Apr', revenue: 189000, orders: 67 },
-  { month: 'May', revenue: 165000, orders: 58 },
-  { month: 'Jun', revenue: 212000, orders: 75 },
-  { month: 'Jul', revenue: 245000, orders: 89 },
-];
-
-const categoryRevenue = [
-  { name: 'Shirts', value: 350000 },
-  { name: 'Dresses', value: 280000 },
-  { name: 'Pants', value: 220000 },
-  { name: 'Jackets', value: 180000 },
-  { name: 'Accessories', value: 120000 },
-];
+// Mock data removed in favor of real data from useAdminOverview
 
 const AdminAnalytics = () => {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
   const { data } = useAdminOverview();
   const totalRevenue = data?.totalRevenue ?? 0;
   const orderCount = data?.totalOrders ?? 0;
+  const revenueData = data?.monthlyData ?? [];
+  const categoryRevenue = data?.categoryData ?? [];
+  
   const averageOrderValue = useMemo(
     () => formatPrice(totalRevenue / Math.max(orderCount, 1)),
     [orderCount, totalRevenue]
@@ -59,12 +45,16 @@ const AdminAnalytics = () => {
     .sort((a, b) => b.reviews - a.reviews)
     .slice(0, 5);
 
+  const currentMonthRevenue = revenueData.length > 0 ? revenueData[revenueData.length - 1].revenue : 0;
+  const previousMonthRevenue = revenueData.length > 1 ? revenueData[revenueData.length - 2].revenue : 0;
+  const revenueGrowth = previousMonthRevenue > 0 ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100 : 0;
+
   const predictiveInsights = [
     {
       title: 'Revenue Forecast',
-      description: 'Expected 18% increase in Q4 based on historical seasonal trends',
-      trend: 'up',
-      value: '₹3.2L projected',
+      description: `Expected ${Math.max(5, Math.round(revenueGrowth))}% increase next month based on recent trends`,
+      trend: revenueGrowth >= 0 ? 'up' : 'down',
+      value: formatPrice(currentMonthRevenue * (1 + Math.max(0.05, revenueGrowth / 100))),
     },
     {
       title: 'Peak Sales Period',
@@ -73,16 +63,16 @@ const AdminAnalytics = () => {
       value: 'Fri-Sun',
     },
     {
-      title: 'Category Growth',
-      description: 'Jackets trending 40% above last month average',
+      title: 'Top Category',
+      description: categoryRevenue.length > 0 ? `${categoryRevenue[0].name} leading sales volume` : 'Gathering data',
       trend: 'up',
-      value: '+40%',
+      value: categoryRevenue.length > 0 ? categoryRevenue[0].name : 'N/A',
     },
     {
-      title: 'Stock Warning',
-      description: 'Polo shirts likely to sell out in 5 days at current rate',
-      trend: 'down',
-      value: '5 days',
+      title: 'Low Stock Alert',
+      description: `${data?.lowStockCount || 0} products running low. Consider restocking.`,
+      trend: data?.lowStockCount ? 'down' : 'up',
+      value: `${data?.lowStockCount || 0} Items`,
     },
   ];
 

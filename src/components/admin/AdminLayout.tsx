@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
+import { useAdmin } from '@/contexts/AdminContext';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -8,12 +9,25 @@ interface AdminLayoutProps {
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
+  const { isAdminAuthenticated, isLoading } = useAdmin();
 
   useEffect(() => {
-    if (localStorage.getItem('adminAuth') !== 'true') {
+    if (!isLoading && !isAdminAuthenticated) {
       navigate('/admin/login');
     }
-  }, [navigate]);
+  }, [isAdminAuthenticated, isLoading, navigate]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAdminAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex">

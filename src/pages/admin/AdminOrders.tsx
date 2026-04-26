@@ -19,6 +19,7 @@ import { products } from '@/data/products';
 import { groupOrders, normalizeOrders, OrderGroup, toDatabaseOrderStatus, upsertOrderGroup } from '@/lib/orders';
 import { AdminOrdersPage, useAdminOrders } from '@/hooks/useAdminOrders';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { getAdminApiHeaders } from '@/lib/adminApi';
 
 const DEFAULT_PRODUCT_IMAGE = '/placeholder.svg';
 const PAGE_SIZE = 20;
@@ -197,13 +198,31 @@ const AdminOrders = () => {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ order, displayStatus, estimatedDelivery }: { order: OrderGroup; displayStatus: string; estimatedDelivery?: string }) => {
+      if (displayStatus === 'Cancelled') {
+        const { data: cancelResult, error: rpcError } = await supabase.rpc('handle_order_cancellation', {
+          p_order_id: order.order_id || order.source_id,
+          p_user_id: order.user_id,
+          p_cancelled_by: 'admin'
+        });
+
+        if (rpcError) throw rpcError;
+        if (!cancelResult.success) throw new Error(cancelResult.error);
+
+        return {
+          ...order,
+          status: 'Cancelled',
+          cancelled_at: new Date().toISOString(),
+        };
+      }
+
       const databaseStatus = toDatabaseOrderStatus(order.schema_version, displayStatus);
+      const adminHeaders = await getAdminApiHeaders();
 
       const response = await fetch('/api/admin/orders/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-token': import.meta.env.VITE_ADMIN_API_TOKEN || 'demo123',
+          ...adminHeaders,
         },
         body: JSON.stringify({
           orderId: order.source_id,
@@ -609,7 +628,7 @@ const AdminOrders = () => {
                         <ChevronLeft className="mr-1 h-4 w-4" />
                         Previous
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
+                      <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>
                         Next
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>
@@ -626,5 +645,3 @@ const AdminOrders = () => {
 };
 
 export default AdminOrders;
-
-

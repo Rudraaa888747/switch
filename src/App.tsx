@@ -25,6 +25,7 @@ const OutfitMatching = lazy(() => import("./pages/OutfitMatching"));
 const Cart = lazy(() => import("./pages/Cart"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Wallet = lazy(() => import("./pages/Wallet"));
 const Wishlist = lazy(() => import("./pages/Wishlist"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -85,6 +86,7 @@ const App = () => (
                       <Route path="/cart" element={<Cart />} />
                       <Route path="/checkout" element={<Checkout />} />
                       <Route path="/profile" element={<Profile />} />
+                      <Route path="/wallet" element={<Wallet />} />
                       <Route path="/wishlist" element={<Wishlist />} />
                       <Route path="/orders" element={<MyOrders />} />
                       

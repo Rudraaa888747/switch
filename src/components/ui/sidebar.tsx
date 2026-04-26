@@ -608,7 +608,33 @@ const SidebarMenuSubButton = React.forwardRef<
   );
 });
 SidebarMenuSubButton.displayName = "SidebarMenuSubButton";
+export {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+};
 
+/* eslint-disable react-refresh/only-export-components */
 export {
   Sidebar,
   SidebarContent,
@@ -635,3 +661,4 @@ export {
   SidebarTrigger,
   useSidebar,
 };
+/* eslint-enable react-refresh/only-export-components */

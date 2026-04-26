@@ -444,7 +444,7 @@ const Auth = () => {
               className="mt-6 pt-6 border-t border-border/50"
               variants={itemVariants}
             >
-              <Link to="/admin/login" onClick={() => localStorage.removeItem('adminAuth')}>
+              <Link to="/admin/login">
                 <motion.button
                   type="button"
                   className="w-full flex items-center justify-center gap-2 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors"

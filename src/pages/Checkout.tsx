@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronLeft, 
@@ -10,7 +10,8 @@ import {
   Shield,
   Package,
   ArrowRight,
-  CheckCircle2
+  CheckCircle2,
+  Wallet,
 } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { useCart } from '@/contexts/CartContext';
@@ -18,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice, type Product } from '@/data/products';
 import { toast } from '@/hooks/use-toast';
 import { getProductImage } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { supabaseRestInsert } from '@/integrations/supabase/publicRest';
 import CouponInput from '@/components/checkout/CouponInput';
 import { getUserOrdersQueryKey } from '@/hooks/useOrders';
@@ -52,7 +54,8 @@ interface CheckoutCartItem {
 const Checkout = () => {
   const navigate = useNavigate();
   const { items, totalPrice, clearCart } = useCart();
-  const { user, isAuthenticated, supabaseUser } = useAuth();
+  const { user, isAuthenticated, isAuthReady, supabaseUser, session, updateProfile } = useAuth();
+  const walletBalance = user?.walletBalance ?? 0;
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<Step>('address');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -79,6 +82,7 @@ const Checkout = () => {
     expiry: '',
     cvv: '',
   });
+  const [upiId, setUpiId] = useState('');
 
   // Snapshot for confirmed order details after cart is cleared
   const [confirmedOrder, setConfirmedOrder] = useState<{
@@ -88,9 +92,15 @@ const Checkout = () => {
     couponCode?: string;
   } | null>(null);
 
+  const [useWallet, setUseWallet] = useState(true);
+
   const shipping = 0; // Free shipping
   const tax = Math.round((totalPrice - couponDiscount) * 0.18); // 18% GST after discount
   const grandTotal = totalPrice - couponDiscount + shipping + tax;
+  const maxWalletPossible = Math.min(walletBalance, Math.max(grandTotal, 0));
+  const walletApplied = useWallet ? maxWalletPossible : 0;
+  const remainingTotal = Math.max(grandTotal - walletApplied, 0);
+  const canUseWallet = walletBalance > 0 && maxWalletPossible > 0;
 
   const steps = [
     { id: 'address', label: 'Address', icon: MapPin },
@@ -127,44 +137,68 @@ const Checkout = () => {
     setCurrentStep('payment');
   };
 
-  
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (isProcessing) return;
 
-    if (paymentMethod === 'card') {
-      if (!cardDetails.number || !cardDetails.name || !cardDetails.expiry || !cardDetails.cvv) {
+    if (remainingTotal > 0 && paymentMethod === 'card') {
+      const isValidExpiry = /^(0[1-9]|1[0-2])\/\d{2}$/.test(cardDetails.expiry.trim());
+      if (
+        cardDetails.number.length !== 16 ||
+        !cardDetails.name.trim() ||
+        !isValidExpiry ||
+        cardDetails.cvv.length !== 3
+      ) {
         toast({
-          title: 'Please fill all card details',
+          title: 'Please enter valid card details',
           variant: 'destructive',
         });
         return;
       }
     }
 
-    const currentUserId = user?.id || supabaseUser?.id || null;
+    if (remainingTotal > 0 && paymentMethod === 'upi' && !/^[\w.-]+@[\w.-]+$/.test(upiId.trim())) {
+      toast({
+        title: 'Please enter a valid UPI ID',
+        variant: 'destructive',
+      });
+      return;
+    }
 
+    const currentUserId = user?.id || supabaseUser?.id || null;
+    if (!currentUserId) {
+      toast({
+        title: 'Please log in to continue',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsProcessing(true);
 
     try {
-      const newOrderId = 'ORD' + Date.now().toString().slice(-8);
+      // Generate a more robust unique order ID
+      const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const timestamp = Date.now().toString().slice(-6);
+      const newOrderId = `ORD-${timestamp}-${randomStr}`;
 
       const estimatedDelivery = new Date();
       estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
       const dateOnly = estimatedDelivery.toISOString().split('T')[0];
+
+      const finalPaymentMethod = remainingTotal === 0
+        ? 'wallet'
+        : `${walletApplied > 0 ? 'wallet+' : ''}${paymentMethod}`;
 
       const orderPayload = {
         order_id: newOrderId,
         user_id: currentUserId,
         status: 'processing',
         estimated_delivery: dateOnly,
-
         subtotal: totalPrice - couponDiscount,
-        tax: tax,
-        shipping: shipping,
+        tax,
+        shipping,
         total: grandTotal,
-        
         items: items.map((item: CheckoutCartItem) => ({
           product_id: item.product.id,
           product_name: item.product.name,
@@ -173,29 +207,105 @@ const Checkout = () => {
           price: item.product.price,
           total_price: item.product.price * item.quantity,
           size: item.size,
-          color: item.color
+          color: item.color,
         })),
-
         customer_name: addressForm.fullName,
         customer_email: addressForm.email || null,
         customer_phone: addressForm.phone,
-
         shipping_address: addressForm.address,
         shipping_city: addressForm.city,
         shipping_state: addressForm.state,
         shipping_pincode: addressForm.pincode,
-
-        payment_method: paymentMethod,
+        payment_method: finalPaymentMethod,
       };
 
-      await Promise.race([
-        supabaseRestInsert('orders', [orderPayload]),
-        new Promise((_, reject) => {
-          window.setTimeout(() => {
-            reject(new Error('Order request timed out before reaching Supabase. Please try once more.'));
-          }, 15000);
-        }),
-      ]);
+      let parsedOrderResult: { success?: boolean; error?: string } | null = null;
+
+      if (walletApplied <= 0) {
+        await supabaseRestInsert('orders', [orderPayload], session?.access_token);
+        parsedOrderResult = { success: true };
+      } else {
+        const rpcResponse = await Promise.race([
+          supabase.rpc('place_order_with_wallet', {
+            p_order_id: newOrderId,
+            p_user_id: currentUserId,
+            p_status: 'processing',
+            p_estimated_delivery: dateOnly,
+            p_subtotal: totalPrice - couponDiscount,
+            p_tax: tax,
+            p_shipping: shipping,
+            p_total: grandTotal,
+            p_items: items.map((item: CheckoutCartItem) => ({
+              product_id: item.product.id,
+              product_name: item.product.name,
+              product_image: getProductImage(item.product, item.color),
+              quantity: item.quantity,
+              price: item.product.price,
+              total_price: item.product.price * item.quantity,
+              size: item.size,
+              color: item.color,
+            })),
+            p_customer_name: addressForm.fullName,
+            p_customer_email: addressForm.email || null,
+            p_customer_phone: addressForm.phone,
+            p_shipping_address: addressForm.address,
+            p_shipping_city: addressForm.city,
+            p_shipping_state: addressForm.state,
+            p_shipping_pincode: addressForm.pincode,
+            p_payment_method: finalPaymentMethod,
+            p_wallet_amount: walletApplied,
+          }),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => {
+              reject(new Error('Order request timed out before reaching Supabase. Please try once more.'));
+            }, 30000);
+          }),
+        ]);
+
+        if ('error' in rpcResponse && rpcResponse.error) {
+          const rpcError = rpcResponse.error;
+          const isMissingCheckoutRpc =
+            rpcError.code === 'PGRST202' ||
+            rpcError.code === '42883' ||
+            /place_order_with_wallet/i.test(rpcError.message || '');
+
+          if (!isMissingCheckoutRpc) {
+            throw rpcError;
+          }
+
+          // Legacy compatibility fallback for environments that have not applied the new
+          // transactional checkout migration yet.
+          await supabaseRestInsert('orders', [orderPayload], session?.access_token);
+
+          const { error: walletError } = await supabase.rpc('deduct_wallet_balance', {
+            p_user_id: currentUserId,
+            p_amount: walletApplied,
+            p_reference_id: newOrderId,
+            p_description: `Wallet payment for order #${newOrderId}`,
+          });
+
+          if (walletError) {
+            throw walletError;
+          }
+
+          parsedOrderResult = { success: true };
+        } else if ('data' in rpcResponse) {
+          parsedOrderResult =
+            typeof rpcResponse.data === 'string'
+              ? JSON.parse(rpcResponse.data)
+              : rpcResponse.data;
+        }
+      }
+
+      if (!parsedOrderResult?.success) {
+        throw new Error(parsedOrderResult?.error || 'Order creation failed');
+      }
+
+      if (walletApplied > 0 && currentUserId) {
+        updateProfile({ walletBalance: Math.max(0, walletBalance - walletApplied) });
+        queryClient.invalidateQueries({ queryKey: ['wallet-profile-balance', currentUserId] });
+        queryClient.invalidateQueries({ queryKey: ['wallet-transactions', currentUserId] });
+      }
 
       setOrderId(newOrderId);
       setConfirmedOrder({
@@ -214,7 +324,12 @@ const Checkout = () => {
       });
 
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Please try again or contact support';
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+            ? err.message
+            : 'Please try again or contact support';
       console.error('Order placement error:', err);
       toast({
         title: 'Order failed',
@@ -225,6 +340,10 @@ const Checkout = () => {
 
     setIsProcessing(false);
   };
+
+  if (isAuthReady && !isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
 
   if (items.length === 0 && currentStep !== 'confirmation') {
     return (
@@ -395,6 +514,7 @@ const Checkout = () => {
                   appliedCoupon={appliedCoupon}
                   onCouponApply={handleCouponApply}
                   isAuthenticated={isAuthenticated}
+                  walletApplied={walletApplied}
                 />
               </div>
             </motion.div>
@@ -412,6 +532,46 @@ const Checkout = () => {
               <div className="lg:col-span-2">
                 <div className="bg-card border border-border rounded-2xl p-6 md:p-8">
                   <h2 className="text-xl font-semibold mb-6">Payment Method</h2>
+
+                  {canUseWallet && (
+                    <div className="rounded-2xl border border-border p-5 mb-6 bg-secondary/5 transition-all">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-full bg-secondary/70 p-3">
+                            <Wallet className="h-5 w-5 text-foreground" />
+                          </div>
+                          <div>
+                            <p className="text-sm uppercase tracking-wide text-muted-foreground font-semibold">
+                              Wallet Balance Available
+                            </p>
+                            <p className="text-lg font-bold">
+                              {formatPrice(maxWalletPossible)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium">{useWallet ? 'Applied' : 'Use Wallet'}</span>
+                          <button
+                            type="button"
+                            onClick={() => setUseWallet(!useWallet)}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors ${useWallet ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                          >
+                            <motion.div
+                              layout
+                              className="w-4 h-4 bg-white rounded-full shadow-sm"
+                              animate={{ x: useWallet ? 24 : 0 }}
+                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm text-muted-foreground border-t border-border/50 pt-3">
+                        {useWallet 
+                          ? `₹${maxWalletPossible} will be deducted from your wallet. Remaining payment will use the selected method.` 
+                          : 'Toggle to apply your wallet balance to this order.'}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Payment Methods */}
                   <div className="space-y-4 mb-8">
@@ -505,6 +665,8 @@ const Checkout = () => {
                       <label className="block text-sm font-medium mb-2">UPI ID</label>
                       <input
                         type="text"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
                         className="input-premium"
                         placeholder="yourname@upi"
                       />
@@ -525,7 +687,12 @@ const Checkout = () => {
                       ) : (
                         <>
                           <Shield size={18} />
-                          Pay {formatPrice(grandTotal)}
+                          Pay {formatPrice(remainingTotal)}
+                          {walletApplied > 0 && remainingTotal > 0 ? (
+                            <span className="ml-2 text-sm font-medium text-muted-foreground">
+                              (+ {formatPrice(walletApplied)} wallet)
+                            </span>
+                          ) : null}
                         </>
                       )}
                     </button>
@@ -547,6 +714,7 @@ const Checkout = () => {
                   grandTotal={grandTotal}
                   couponDiscount={couponDiscount}
                   appliedCoupon={appliedCoupon}
+                  walletApplied={walletApplied}
                 />
               </div>
             </motion.div>
@@ -629,6 +797,7 @@ interface OrderSummaryProps {
   appliedCoupon?: CouponData | null;
   onCouponApply?: (discount: number, couponData: CouponData | null) => void;
   isAuthenticated?: boolean;
+  walletApplied?: number;
 }
 
 const OrderSummary = ({ 
@@ -639,7 +808,8 @@ const OrderSummary = ({
   couponDiscount = 0,
   appliedCoupon,
   onCouponApply,
-  isAuthenticated = false
+  isAuthenticated = false,
+  walletApplied = 0
 }: OrderSummaryProps) => (
   <div className="bg-card border border-border rounded-2xl p-6 sticky top-24">
     <h3 className="font-semibold mb-4">Order Summary</h3>
@@ -699,15 +869,27 @@ const OrderSummary = ({
         <span className="text-muted-foreground">Tax (GST 18%)</span>
         <span>{formatPrice(tax)}</span>
       </div>
+      
+      {walletApplied > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="flex justify-between text-sm text-primary font-medium border-t border-border/50 pt-2"
+        >
+          <span>Wallet Applied</span>
+          <span>-{formatPrice(walletApplied)}</span>
+        </motion.div>
+      )}
+
       <motion.div 
-        key={grandTotal}
+        key={grandTotal - walletApplied}
         initial={{ scale: 1.02, color: 'hsl(var(--primary))' }}
         animate={{ scale: 1, color: 'hsl(var(--foreground))' }}
         transition={{ duration: 0.3 }}
         className="flex justify-between font-semibold text-lg pt-2 border-t border-border"
       >
-        <span>Total</span>
-        <span>{formatPrice(grandTotal)}</span>
+        <span>Total Payable</span>
+        <span>{formatPrice(Math.max(grandTotal - walletApplied, 0))}</span>
       </motion.div>
     </div>
 
@@ -719,4 +901,3 @@ const OrderSummary = ({
 );
 
 export default Checkout;
-

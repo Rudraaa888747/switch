@@ -14,6 +14,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useAdmin } from '@/contexts/AdminContext';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
@@ -29,10 +30,12 @@ const menuItems = [
 const AdminSidebar = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const { adminName, adminLogout } = useAdmin();
 
   const isActive = (path: string) => location.pathname === path;
 
   const handleLogout = () => {
+    adminLogout();
     window.location.href = '/';
   };
 
@@ -97,7 +100,7 @@ const AdminSidebar = () => {
       <div className="p-3 border-t border-border space-y-2">
         {!collapsed && (
           <div className="px-3 py-2">
-            <p className="text-sm font-medium truncate">Admin</p>
+            <p className="text-sm font-medium truncate">{adminName || 'Admin'}</p>
             <p className="text-xs text-muted-foreground">Administrator</p>
           </div>
         )}

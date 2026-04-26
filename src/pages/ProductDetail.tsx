@@ -74,7 +74,7 @@ const ProductDetail = () => {
       setSelectedSize('');
       setQuantity(1);
     }
-  }, [product?.id]);
+  }, [product?.id, product?.variants]);
 
   // Current images from selected variant
   const currentImages = useMemo(() => {

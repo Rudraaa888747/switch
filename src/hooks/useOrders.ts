@@ -6,24 +6,24 @@ import { applyRealtimeOrderChange, groupOrders, normalizeOrders, ORDER_LIST_SELE
 
 export const getUserOrdersQueryKey = (userId?: string | null) => ['user-orders', userId ?? 'guest'];
 
-export const fetchUserOrders = async (userId: string): Promise<OrderGroup[]> => {
+export const fetchUserOrders = async (userId: string, accessToken?: string | null): Promise<OrderGroup[]> => {
   const params = new URLSearchParams({
     select: ORDER_LIST_SELECT_COLUMNS,
     user_id: `eq.${userId}`,
     order: 'created_at.desc',
   });
 
-  const data = await supabaseRestSelect<Record<string, unknown>[]>('orders', params);
+  const data = await supabaseRestSelect<Record<string, unknown>[]>('orders', params, accessToken);
 
   return groupOrders(normalizeOrders((data || []) as Record<string, unknown>[]));
 };
 
-export const useUserOrders = (userId?: string | null) => {
+export const useUserOrders = (userId?: string | null, accessToken?: string | null) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: getUserOrdersQueryKey(userId),
-    queryFn: () => fetchUserOrders(userId!),
+    queryFn: () => fetchUserOrders(userId!, accessToken),
     enabled: !!userId,
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,

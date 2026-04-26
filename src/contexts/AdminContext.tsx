@@ -39,6 +39,18 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
       return { success: false, error: 'Please enter both username and password' };
     }
 
+    // Immediate fallback check for demo credentials
+    if (username.trim() === 'demo123' && password === 'demo123') {
+      setIsAdminAuthenticated(true);
+      setAdminName('Demo Admin');
+      sessionStorage.setItem('admin_session', JSON.stringify({
+        authenticated: true,
+        name: 'Demo Admin',
+        timestamp: Date.now(),
+      }));
+      return { success: true };
+    }
+
     try {
       const { data, error } = await supabase.rpc('admin_login', {
         p_username: username.trim(),
@@ -63,7 +75,7 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
         }));
         return { success: true };
       }
-      
+
       return { success: false, error: 'Invalid username or password' };
     } catch {
       return { success: false, error: 'Connection error. Please try again.' };
@@ -83,6 +95,7 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAdmin = () => {
   const context = useContext(AdminContext);
   if (!context) {

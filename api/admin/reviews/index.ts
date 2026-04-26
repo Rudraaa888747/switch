@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdminClient, isAdminApiAuthorized } from '../../_lib/supabase-admin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isAdminApiAuthorized(req.headers)) {
+  if (!(await isAdminApiAuthorized(req.headers))) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

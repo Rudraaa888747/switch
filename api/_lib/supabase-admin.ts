@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const getSupabaseUrl = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const getServiceRoleKey = () => process.env.SUPABASE_SERVICE_ROLE_KEY;
-const getAdminToken = () => process.env.ADMIN_API_TOKEN || process.env.VITE_ADMIN_API_TOKEN || 'demo123';
+const getAdminToken = () => process.env.ADMIN_API_TOKEN;
 
 export const getSupabaseAdminClient = () => {
   const supabaseUrl = getSupabaseUrl();
@@ -24,12 +24,48 @@ export const getSupabaseAdminClient = () => {
   });
 };
 
-export const isAdminApiAuthorized = (headers: Record<string, string | string[] | undefined>) => {
+const getBearerToken = (headers: Record<string, string | string[] | undefined>) => {
+  const authorizationHeader = headers.authorization;
+  const rawValue = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader;
+  if (!rawValue) return null;
+
+  const [scheme, token] = rawValue.split(' ');
+  if (scheme?.toLowerCase() !== 'bearer' || !token) {
+    return null;
+  }
+
+  return token;
+};
+
+export const isAdminApiAuthorized = async (headers: Record<string, string | string[] | undefined>) => {
+  const supabaseAdmin = getSupabaseAdminClient();
+  const bearerToken = getBearerToken(headers);
+
+  if (bearerToken) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(bearerToken);
+
+    if (!userError && user) {
+      const { data: isAdmin, error: adminError } = await supabaseAdmin.rpc('is_admin', {
+        check_user: user.id,
+      });
+
+      if (!adminError && Boolean(isAdmin)) {
+        return true;
+      }
+    }
+  }
+
+  const configuredToken = getAdminToken();
+  if (!configuredToken) {
+    return false;
+  }
+
   const headerValue = headers['x-admin-token'];
   const token = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  // Keep demo token compatibility even when deployment env tokens drift.
-  // This admin surface already uses demo/local auth semantics.
-  return token === getAdminToken() || token === 'demo123';
+  return token === configuredToken;
 };
 
 

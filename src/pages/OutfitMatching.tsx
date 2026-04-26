@@ -54,7 +54,7 @@ const OutfitMatching = () => {
     };
     
     fetchMatches();
-  }, [selectedProduct]);
+  }, [selectedProduct, getAIMatches]);
 
   // Get color palette for visualization
   const getColorVisualization = () => {

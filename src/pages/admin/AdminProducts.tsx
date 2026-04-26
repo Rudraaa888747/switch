@@ -80,8 +80,12 @@ const AdminProducts = () => {
   }, [dbProducts, searchQuery, categoryFilter]);
 
   // Mutations
+  type ProductFormValues = Omit<ProductData, 'id' | 'image_url'> & {
+    original_price: number | null;
+  };
+
   const addMutation = useMutation({
-    mutationFn: async (newProduct: any) => {
+    mutationFn: async (newProduct: ProductFormValues) => {
       const data = await supabaseRestInsert<ProductData[]>('products', [{ ...newProduct, id: `prod-${Date.now()}` }]);
       return data[0];
     },
@@ -97,7 +101,7 @@ const AdminProducts = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<ProductFormValues> }) => {
       const params = new URLSearchParams({
         id: `eq.${id}`,
       });

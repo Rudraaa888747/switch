@@ -18,6 +18,7 @@ import { supabaseRestSelect, supabaseRestUpdate } from '@/integrations/supabase/
 import { normalizeOrders } from '@/lib/orders';
 import { getReturnReasonBadgeClass, getReturnReasonLabel, RETURN_REASON_OPTIONS } from '@/lib/returnReasons';
 import { getProductImage, normalizeImageUrl } from '@/lib/utils';
+import { getAdminApiHeaders } from '@/lib/adminApi';
 import { toast } from 'sonner';
 
 const DEFAULT_PRODUCT_IMAGE = '/placeholder.svg';
@@ -35,6 +36,9 @@ type AdminReturnRow = Record<string, unknown> & {
   created_at?: string;
   estimated_refund_date?: string;
   quantity?: number;
+  order_item_id?: string;
+  refund_method?: string | null;
+  payment_method?: string | null;
   items?: AdminReturnRow[];
   profiles?: { display_name?: string } | null;
   orders?: { order_id?: string } | null;
@@ -55,6 +59,10 @@ type UpdateReturnPayload = {
   refund_amount?: number;
   estimated_refund_date?: string;
   admin_note?: string | null;
+  process_wallet_refund?: boolean;
+  wallet_user_id?: string;
+  wallet_reference_id?: string;
+  wallet_description?: string;
 };
 
 const parseApiResponse = async (response: Response): Promise<{ data?: AdminReturnsApiData; error?: string }> => {
@@ -78,14 +86,58 @@ const parseImageUrls = (value: unknown): string[] => {
   }
 };
 
+const isWalletRefundRequired = (ret: AdminReturnRow) => {
+  const refundMethod = String(ret.refund_method || '').toLowerCase();
+  const paymentMode = String(ret.payment_mode || ret.payment_method || '').toLowerCase();
+  return refundMethod === 'wallet' || paymentMode === 'cod';
+};
+
+const buildReturnUpdateBody = (payload: UpdateReturnPayload) => {
+  const body: Record<string, unknown> = {};
+  if (payload.status !== undefined) body.status = payload.status;
+  if (payload.refund_amount !== undefined) body.refund_amount = payload.refund_amount;
+  if (payload.estimated_refund_date !== undefined) body.estimated_refund_date = payload.estimated_refund_date;
+  if (payload.admin_note !== undefined) body.admin_note = payload.admin_note;
+  return body;
+};
+
+const updateReturnViaRest = async (payload: UpdateReturnPayload) => {
+  const body = buildReturnUpdateBody(payload);
+  
+  const [returnRes, walletRes] = await Promise.all([
+    supabase.from('return_requests').update(body).eq('id', payload.id).select(),
+    payload.process_wallet_refund && payload.wallet_user_id && payload.refund_amount !== undefined
+      ? supabase.rpc('add_wallet_credit', {
+          p_user_id: payload.wallet_user_id,
+          p_amount: payload.refund_amount,
+          p_source: 'refund',
+          p_reference_id: payload.wallet_reference_id ?? payload.id,
+          p_description: payload.wallet_description ?? `Refund for return request #${payload.id.slice(0, 8)}`,
+        })
+      : Promise.resolve({ error: null }),
+  ]);
+
+  if (returnRes.error) {
+    throw new Error(returnRes.error.message);
+  }
+
+  if (walletRes?.error && !/duplicate|already exists/i.test(walletRes.error.message)) {
+    throw new Error(walletRes.error.message);
+  }
+
+  if (!returnRes.data || returnRes.data.length === 0) {
+    throw new Error('Return request not found or not updated');
+  }
+};
+
 const getStatusBadge = (status?: string) => {
   const value = (status || '').toLowerCase();
-  if (value === 'requested') return <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30">Requested</Badge>;
-  if (value === 'approved') return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/30">Approved</Badge>;
-  if (value === 'picked_up') return <Badge className="bg-orange-500/10 text-orange-700 dark:text-orange-300 border border-orange-500/30">Picked Up</Badge>;
-  if (value === 'refunded') return <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">Refunded</Badge>;
-  if (value === 'rejected') return <Badge variant="destructive">Rejected</Badge>;
-  return <Badge variant="secondary">{status || 'Unknown'}</Badge>;
+  if (value === 'requested') return <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30 whitespace-nowrap">Requested</Badge>;
+  if (value === 'approved') return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/30 whitespace-nowrap">Approved</Badge>;
+  if (value === 'picked_up') return <Badge className="bg-orange-500/10 text-orange-700 dark:text-orange-300 border border-orange-500/30 whitespace-nowrap">Picked Up</Badge>;
+  if (value === 'refunded') return <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 whitespace-nowrap">Refunded</Badge>;
+  if (value === 'rejected') return <Badge variant="destructive" className="whitespace-nowrap">Rejected</Badge>;
+  return <Badge variant="secondary" className="whitespace-nowrap">{status || 'Unknown'}</Badge>;
 };
 
 const loadReturns = async () => {
@@ -122,7 +174,7 @@ const loadReturns = async () => {
   } catch {
     const response = await fetch('/api/admin/returns', {
       method: 'GET',
-      headers: { 'x-admin-token': import.meta.env.VITE_ADMIN_API_TOKEN || 'demo123' },
+      headers: await getAdminApiHeaders(),
     });
     const result = await parseApiResponse(response);
     if (!response.ok) throw new Error(result.error || `Failed to load returns (HTTP ${response.status})`);
@@ -174,7 +226,10 @@ const AdminReturns = () => {
             order_items: {
               product_name: product?.name || match?.product_name || 'Order Item',
               product_image: image || DEFAULT_PRODUCT_IMAGE,
-              unit_price: match?.total_price || 0,
+              unit_price:
+                match && Number(match.quantity || 0) > 0
+                  ? Number(match.total_price || 0) / Number(match.quantity || 1)
+                  : Number(match?.total_price || 0),
             },
           };
         });
@@ -184,6 +239,7 @@ const AdminReturns = () => {
           reason: ret.reason || 'other',
           comment: (ret.comment as string) || (ret.additional_details as string) || null,
           images: parseImageUrls(ret.images),
+          payment_mode: order?.payment_mode || order?.payment_method || 'cod',
           profiles: { display_name: String(profile?.display_name || 'Anonymous') },
           orders: { order_id: String(order?.order_id || order?.order_number || order?.id || ret.id || '') },
           items: returnItems,
@@ -195,19 +251,40 @@ const AdminReturns = () => {
 
   const updateReturnMutation = useMutation({
     mutationFn: async (payload: UpdateReturnPayload) => {
-      const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (payload.status !== undefined) body.status = payload.status;
-      if (payload.refund_amount !== undefined) body.refund_amount = payload.refund_amount;
-      if (payload.estimated_refund_date !== undefined) body.estimated_refund_date = payload.estimated_refund_date;
-      if (payload.admin_note !== undefined) body.admin_note = payload.admin_note;
-      await supabaseRestUpdate('return_requests', body, new URLSearchParams({ id: `eq.${payload.id}` }));
+      const requestBody = { ...payload };
+
+      try {
+        const response = await fetch('/api/admin/returns', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(await getAdminApiHeaders()),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        const result = await parseApiResponse(response);
+        if (!response.ok) {
+          throw new Error(result.error || `Failed to update return (HTTP ${response.status})`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (!/HTTP 401|HTTP 404|Unauthorized|not found/i.test(message)) {
+          throw error;
+        }
+
+        await updateReturnViaRest(payload);
+      }
     },
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
-      toast.success(payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved');
+      if (payload.status !== 'refunded') {
+        toast.success(payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved');
+      }
     },
     onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to update return');
+      const errorMessage = error instanceof Error ? error.message : (error as Record<string, unknown>)?.message || 'Failed to update return';
+      toast.error(String(errorMessage));
     },
   });
 
@@ -230,17 +307,53 @@ const AdminReturns = () => {
     return itemTotal > 0 ? itemTotal : Number(ret._order_total || 0);
   };
 
+  const processRefund = async (ret: AdminReturnRow) => {
+    const refundAmount = computeRefundTotal(ret);
+    const shouldCreditWallet = isWalletRefundRequired(ret);
+    try {
+      await updateReturnMutation.mutateAsync({
+        id: String(ret.id),
+        status: 'refunded',
+        refund_amount: refundAmount,
+        process_wallet_refund: shouldCreditWallet && String(ret.status || '').toLowerCase() !== 'approved',
+        wallet_user_id: ret.user_id,
+        wallet_reference_id: String(ret.id),
+        wallet_description: `Refund for return request #${String(ret.id).slice(0, 8)}`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
+      toast.success(
+        shouldCreditWallet
+          ? `Refund successful! ₹${refundAmount} has been credited to the user's wallet.`
+          : `Refund marked complete for ₹${refundAmount}. No wallet credit was applied for this refund method.`
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to process refund');
+      console.error(error);
+    }
+  };
+
   const updateStatus = (ret: AdminReturnRow, status: string) => {
+    if (status === 'refunded') {
+      processRefund(ret);
+      return;
+    }
     const payload: UpdateReturnPayload = { id: String(ret.id), status };
-    if (status === 'approved') payload.estimated_refund_date = addDays(new Date(), 7).toISOString();
-    if (status === 'refunded') payload.refund_amount = computeRefundTotal(ret);
+    if (status === 'approved') {
+      payload.estimated_refund_date = addDays(new Date(), 7).toISOString();
+      payload.refund_amount = computeRefundTotal(ret);
+      payload.process_wallet_refund = isWalletRefundRequired(ret);
+      payload.wallet_user_id = ret.user_id;
+      payload.wallet_reference_id = String(ret.id);
+      payload.wallet_description = `Refund for return request #${String(ret.id).slice(0, 8)}`;
+    }
     updateReturnMutation.mutate(payload);
   };
 
   return (
     <AdminLayout>
       <TooltipProvider>
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
           <div>
             <h1 className="text-3xl font-bold tracking-tight uppercase">Return Management</h1>
             <p className="text-sm text-muted-foreground mt-1">Review and process customer refund requests with precision.</p>
@@ -285,47 +398,61 @@ const AdminReturns = () => {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/30 text-[10px] uppercase font-bold tracking-widest text-muted-foreground border-b border-border/40">
                       <tr>
-                        <th className="px-6 py-4 text-left">Order / Date</th><th className="px-6 py-4 text-left">Customer</th><th className="px-6 py-4 text-left">Items</th><th className="px-6 py-4 text-left">Amount</th><th className="px-6 py-4 text-left">Reason</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-right">Actions</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Order / Date</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Customer</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Items</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Amount</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Payment</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Reason</th>
+                        <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
+                        <th className="px-2 py-2 text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/30">
                       {filteredReturns.map((ret) => (
                         <tr key={String(ret.id)} className="hover:bg-muted/20">
-                          <td className="px-6 py-5"><p className="font-bold text-xs">#{String(ret.orders?.order_id || ret.id || '').slice(0, 14)}</p><p className="text-[10px] text-muted-foreground">{ret.created_at ? format(new Date(String(ret.created_at)), 'dd MMM yyyy') : 'Unknown'}</p></td>
-                          <td className="px-6 py-5 text-xs font-semibold">{String(ret.profiles?.display_name || 'Anonymous')}</td>
-                          <td className="px-6 py-5">
-                            <div className="space-y-2">
+                          <td className="px-2 py-2"><p className="font-bold text-xs whitespace-nowrap">#{String(ret.orders?.order_id || ret.id || '').slice(0, 14)}</p><p className="text-[10px] text-muted-foreground whitespace-nowrap">{ret.created_at ? format(new Date(String(ret.created_at)), 'dd MMM yyyy') : 'Unknown'}</p></td>
+                          <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">{String(ret.profiles?.display_name || 'Anonymous')}</td>
+                          <td className="px-2 py-2">
+                            <div className="space-y-1">
                               {(ret.items || []).slice(0, 2).map((item) => (
-                                <div key={String(item.id)} className="flex items-center gap-3">
+                                <div key={String(item.id)} className="flex items-center gap-2">
                                   <ProductImageViewer
                                     src={String(item.order_items?.product_image || DEFAULT_PRODUCT_IMAGE)}
                                     alt={String(item.order_items?.product_name || 'Product')}
-                                    className="w-12 h-14 flex-shrink-0"
+                                    className="w-8 h-10 flex-shrink-0"
                                   />
-                                  <p className="text-xs font-medium truncate max-w-[140px]">{String(item.order_items?.product_name || 'Order Item')}</p>
+                                  <p className="text-xs font-medium truncate max-w-[120px]">{String(item.order_items?.product_name || 'Order Item')}</p>
                                 </div>
                               ))}
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-xs font-bold">{formatPrice(computeRefundTotal(ret))}</td>
-                          <td className="px-6 py-5">
-                            <Badge className={getReturnReasonBadgeClass(String(ret.reason || 'other'))}>{getReturnReasonLabel(String(ret.reason || 'other'))}</Badge>
-                            {ret.comment ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild><p className="text-[11px] text-muted-foreground max-w-[160px] truncate mt-1 cursor-help">{String(ret.comment)}</p></TooltipTrigger>
-                                <TooltipContent className="max-w-xs whitespace-pre-wrap">{String(ret.comment)}</TooltipContent>
-                              </Tooltip>
-                            ) : null}
+                          <td className="px-2 py-2 text-xs font-bold whitespace-nowrap">{formatPrice(computeRefundTotal(ret))}</td>
+                          <td className="px-2 py-2">
+                            <Badge variant="outline" className="text-[10px] uppercase whitespace-nowrap">
+                              {ret.payment_mode || 'COD'}
+                            </Badge>
                           </td>
-                          <td className="px-6 py-5">{getStatusBadge(String(ret.status || ''))}</td>
-                          <td className="px-6 py-5 text-right">
-                            <div className="flex justify-end flex-wrap gap-2">
-                              <Button size="sm" variant="outline" onClick={() => { setSelectedReturn(ret); setAdminNoteDraft(String(ret.admin_note || '')); }}><Eye className="mr-1 h-3.5 w-3.5" />View</Button>
-                              {ret.status === 'requested' ? <Button size="sm" onClick={() => updateStatus(ret, 'approved')}><CheckCircle className="mr-1 h-3.5 w-3.5" />Approve</Button> : null}
-                              {ret.status === 'requested' ? <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => updateStatus(ret, 'rejected')}><XSquare className="mr-1 h-3.5 w-3.5" />Reject</Button> : null}
-                              {ret.status === 'approved' ? <Button size="sm" className="bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(ret, 'picked_up')}><Box className="mr-1 h-3.5 w-3.5" />Picked Up</Button> : null}
-                              {ret.status === 'picked_up' ? <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(ret, 'refunded')}><CreditCard className="mr-1 h-3.5 w-3.5" />Refunded</Button> : null}
-                              {ret.status === 'rejected' || ret.status === 'refunded' ? <div className="text-[10px] font-black text-muted-foreground uppercase bg-muted/40 px-3 py-1.5 rounded-lg border border-border/40 flex items-center gap-1"><Clock size={12} />Processed</div> : null}
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge className={getReturnReasonBadgeClass(String(ret.reason || 'other')) + " text-[10px] whitespace-nowrap"}>{getReturnReasonLabel(String(ret.reason || 'other'))}</Badge>
+                              {ret.comment ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild><p className="text-[10px] text-muted-foreground max-w-[120px] truncate cursor-help">{String(ret.comment)}</p></TooltipTrigger>
+                                  <TooltipContent className="max-w-xs whitespace-pre-wrap">{String(ret.comment)}</TooltipContent>
+                                </Tooltip>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 whitespace-nowrap">{getStatusBadge(String(ret.status || ''))}</td>
+                          <td className="px-2 py-2 text-right">
+                            <div className="flex justify-end flex-wrap gap-1.5 min-w-[160px]">
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => { setSelectedReturn(ret); setAdminNoteDraft(String(ret.admin_note || '')); }}><Eye className="mr-1 h-3 w-3" />View</Button>
+                              {ret.status === 'requested' ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateStatus(ret, 'approved')}><CheckCircle className="mr-1 h-3 w-3" />Approve</Button> : null}
+                              {ret.status === 'requested' ? <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => updateStatus(ret, 'rejected')}><XSquare className="mr-1 h-3 w-3" />Reject</Button> : null}
+                              {ret.status === 'approved' ? <Button size="sm" className="h-7 px-2 text-xs bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(ret, 'picked_up')}><Box className="mr-1 h-3 w-3" />Picked Up</Button> : null}
+                              {ret.status === 'picked_up' ? <Button size="sm" className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(ret, 'refunded')}><CreditCard className="mr-1 h-3 w-3" />Refunded</Button> : null}
+                              {ret.status === 'rejected' || ret.status === 'refunded' ? <div className="text-[9px] font-black text-muted-foreground uppercase bg-muted/40 px-2 py-1 rounded border border-border/40 flex items-center gap-1"><Clock size={10} />Processed</div> : null}
                             </div>
                           </td>
                         </tr>
@@ -343,8 +470,9 @@ const AdminReturns = () => {
             {selectedReturn ? (
               <div className="space-y-4">
                 <DialogHeader><DialogTitle className="uppercase">Return Request Details</DialogTitle></DialogHeader>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Order</p><p className="font-bold">#{String(selectedReturn.orders?.order_id || selectedReturn.id || '').slice(0, 16)}</p><p className="text-xs text-muted-foreground mt-2">Customer</p><p>{String(selectedReturn.profiles?.display_name || 'Anonymous')}</p></CardContent></Card>
+                  <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Payment Mode</p><Badge variant="outline" className="uppercase">{selectedReturn.payment_mode || 'COD'}</Badge><p className="text-xs text-muted-foreground mt-2">Refund Amount</p><p className="font-bold text-primary">{formatPrice(computeRefundTotal(selectedReturn))}</p></CardContent></Card>
                   <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Reason</p><Badge className={getReturnReasonBadgeClass(String(selectedReturn.reason || 'other'))}>{getReturnReasonLabel(String(selectedReturn.reason || 'other'))}</Badge><p className="text-xs text-muted-foreground mt-2">Status</p>{getStatusBadge(String(selectedReturn.status || ''))}</CardContent></Card>
                 </div>
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Comment</p><p className="text-sm whitespace-pre-wrap">{String(selectedReturn.comment || 'No additional comment provided.')}</p></CardContent></Card>

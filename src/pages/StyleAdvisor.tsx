@@ -100,24 +100,38 @@ const StyleAdvisor = () => {
   const matchingProducts = useMemo(() => {
     if (!analysisResult) return products.slice(0, 8);
     
-    // Filter products by colors that match the palette
     const paletteColors = analysisResult.colorPalette.map(c => c.toLowerCase());
+    const styleCategory = analysisResult.styleCategory.toLowerCase();
     
     return products
-      .filter(product => {
+      .map(product => {
+        let score = 0;
+        
+        // Match style category
+        if (product.category.toLowerCase().includes(styleCategory) || 
+            styleCategory.includes(product.category.toLowerCase())) {
+          score += 5;
+        }
+        
+        // Match colors
         const productColors = product.colors.map(c => c.toLowerCase());
-        // Check if any product color relates to the palette
-        return productColors.some(pc => {
-          if (paletteColors.some(pal => {
-            // Simple color matching heuristic
-            if (pc.includes('black') || pc.includes('dark')) return pal.includes('#1') || pal.includes('#2');
-            if (pc.includes('white') || pc.includes('cream')) return pal.includes('#e') || pal.includes('#f');
-            if (pc.includes('navy') || pc.includes('blue')) return pal.includes('#1a') || pal.includes('#3b');
-            return true;
-          })) return true;
-          return false;
+        productColors.forEach(pc => {
+          paletteColors.forEach(pal => {
+            // Check if product color name matches hex color conceptually (simplified)
+            if ((pc.includes('black') && (pal.includes('#0') || pal.includes('#1') || pal.includes('#2'))) ||
+                (pc.includes('white') && (pal.includes('#f') || pal.includes('#e'))) ||
+                (pc.includes('blue') && (pal.includes('#1a') || pal.includes('#3b'))) ||
+                (pc.includes('beige') && (pal.includes('#f5') || pal.includes('#d'))) ||
+                (pc.includes('red') && (pal.includes('#e') || pal.includes('#f')))) {
+              score += 2;
+            }
+          });
         });
+        
+        return { product, score };
       })
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.product)
       .slice(0, 8);
   }, [analysisResult]);
 

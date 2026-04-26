@@ -24,8 +24,13 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('cart');
-      return stored ? JSON.parse(stored) : [];
+      try {
+        const stored = localStorage.getItem('cart');
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        localStorage.removeItem('cart');
+        return [];
+      }
     }
     return [];
   });
@@ -106,6 +111,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useCart = () => {
   const context = useContext(CartContext);
   if (!context) {
