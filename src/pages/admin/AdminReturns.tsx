@@ -87,9 +87,8 @@ const parseImageUrls = (value: unknown): string[] => {
 };
 
 const isWalletRefundRequired = (ret: AdminReturnRow) => {
-  const refundMethod = String(ret.refund_method || '').toLowerCase();
-  const paymentMode = String(ret.payment_mode || ret.payment_method || '').toLowerCase();
-  return refundMethod === 'wallet' || paymentMode === 'cod';
+  // Always credit wallet instantly as requested by admin
+  return true;
 };
 
 const buildReturnUpdateBody = (payload: UpdateReturnPayload) => {
@@ -279,7 +278,11 @@ const AdminReturns = () => {
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
       if (payload.status !== 'refunded') {
-        toast.success(payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved');
+        let message = payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved';
+        if (payload.process_wallet_refund && payload.refund_amount) {
+          message += `. ₹${payload.refund_amount} credited to user wallet instantly!`;
+        }
+        toast.success(message);
       }
     },
     onError: (error: unknown) => {
@@ -315,7 +318,8 @@ const AdminReturns = () => {
         id: String(ret.id),
         status: 'refunded',
         refund_amount: refundAmount,
-        process_wallet_refund: shouldCreditWallet && String(ret.status || '').toLowerCase() !== 'approved',
+        // We already credited the wallet instantly at the "approved" stage
+        process_wallet_refund: false, 
         wallet_user_id: ret.user_id,
         wallet_reference_id: String(ret.id),
         wallet_description: `Refund for return request #${String(ret.id).slice(0, 8)}`,
@@ -324,8 +328,8 @@ const AdminReturns = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
       toast.success(
         shouldCreditWallet
-          ? `Refund successful! ₹${refundAmount} has been credited to the user's wallet.`
-          : `Refund marked complete for ₹${refundAmount}. No wallet credit was applied for this refund method.`
+          ? `Refund marked complete. (₹${refundAmount} was already credited to wallet instantly at approval)`
+          : `Refund marked complete for ₹${refundAmount}.`
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to process refund');
