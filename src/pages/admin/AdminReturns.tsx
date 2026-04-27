@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatPrice, products } from '@/data/products';
 import { supabase } from '@/integrations/supabase/client';
-import { supabaseRestSelect, supabaseRestUpdate } from '@/integrations/supabase/publicRest';
+import { supabaseRestUpdate } from '@/integrations/supabase/publicRest';
 import { normalizeOrders } from '@/lib/orders';
 import { getReturnReasonBadgeClass, getReturnReasonLabel, RETURN_REASON_OPTIONS } from '@/lib/returnReasons';
 import { getProductImage, normalizeImageUrl } from '@/lib/utils';
@@ -141,35 +141,37 @@ const getStatusBadge = (status?: string) => {
 
 const loadReturns = async () => {
   try {
-    const returnRequests = await supabaseRestSelect<AdminReturnRow[]>(
-      'return_requests',
-      new URLSearchParams({ select: '*', order: 'created_at.desc' })
-    );
+    // Use authenticated Supabase client to bypass anon-key RLS restrictions
+    const { data: returnRequests, error: returnError } = await supabase
+      .from('return_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    const requestIds = [...new Set((returnRequests || []).map((row) => row.id).filter(Boolean))];
-    const orderIds = [...new Set((returnRequests || []).map((row) => row.order_id).filter(Boolean))];
-    const userIds = [...new Set((returnRequests || []).map((row) => row.user_id).filter(Boolean))];
+    if (returnError) throw new Error(returnError.message);
 
-    const items = requestIds.length
-      ? await supabaseRestSelect<AdminReturnRow[]>(
-          'return_request_items',
-          new URLSearchParams({ select: '*', return_request_id: `in.(${requestIds.join(',')})` })
-        )
-      : [];
-    const orders = orderIds.length
-      ? await supabaseRestSelect<AdminReturnRow[]>(
-          'orders',
-          new URLSearchParams({ select: '*', id: `in.(${orderIds.join(',')})` })
-        )
-      : [];
-    const profiles = userIds.length
-      ? await supabaseRestSelect<AdminReturnRow[]>(
-          'profiles',
-          new URLSearchParams({ select: 'user_id,display_name', user_id: `in.(${userIds.join(',')})` })
-        )
-      : [];
+    const requests = (returnRequests || []) as AdminReturnRow[];
+    const requestIds = [...new Set(requests.map((row) => row.id).filter(Boolean))] as string[];
+    const orderIds = [...new Set(requests.map((row) => row.order_id).filter(Boolean))] as string[];
+    const userIds = [...new Set(requests.map((row) => row.user_id).filter(Boolean))] as string[];
 
-    return { returnRequests: returnRequests || [], orders: orders || [], profiles: profiles || [], items: items || [] } as AdminReturnsApiData;
+    const [itemsRes, ordersRes, profilesRes] = await Promise.all([
+      requestIds.length
+        ? supabase.from('return_request_items').select('*').in('return_request_id', requestIds)
+        : Promise.resolve({ data: [], error: null }),
+      orderIds.length
+        ? supabase.from('orders').select('*').in('id', orderIds)
+        : Promise.resolve({ data: [], error: null }),
+      userIds.length
+        ? supabase.from('profiles').select('user_id, display_name').in('user_id', userIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    return {
+      returnRequests: requests,
+      orders: (ordersRes.data || []) as AdminReturnRow[],
+      profiles: (profilesRes.data || []) as AdminReturnRow[],
+      items: (itemsRes.data || []) as AdminReturnRow[],
+    } as AdminReturnsApiData;
   } catch {
     const response = await fetch('/api/admin/returns', {
       method: 'GET',
@@ -277,6 +279,17 @@ const AdminReturns = () => {
     },
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
+      
+      setSelectedReturn((prev) => {
+        if (prev && String(prev.id) === payload.id) {
+          const updated = { ...prev };
+          if (payload.status) updated.status = payload.status;
+          if (payload.admin_note !== undefined) updated.admin_note = payload.admin_note;
+          return updated;
+        }
+        return prev;
+      });
+
       if (payload.status !== 'refunded') {
         let message = payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved';
         if (payload.process_wallet_refund && payload.refund_amount) {
@@ -318,8 +331,7 @@ const AdminReturns = () => {
         id: String(ret.id),
         status: 'refunded',
         refund_amount: refundAmount,
-        // We already credited the wallet instantly at the "approved" stage
-        process_wallet_refund: false, 
+        process_wallet_refund: shouldCreditWallet, 
         wallet_user_id: ret.user_id,
         wallet_reference_id: String(ret.id),
         wallet_description: `Refund for return request #${String(ret.id).slice(0, 8)}`,
@@ -328,7 +340,7 @@ const AdminReturns = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
       toast.success(
         shouldCreditWallet
-          ? `Refund marked complete. (₹${refundAmount} was already credited to wallet instantly at approval)`
+          ? `Refund marked complete. ₹${refundAmount} credited to customer wallet.`
           : `Refund marked complete for ₹${refundAmount}.`
       );
     } catch (error) {
@@ -346,10 +358,6 @@ const AdminReturns = () => {
     if (status === 'approved') {
       payload.estimated_refund_date = addDays(new Date(), 7).toISOString();
       payload.refund_amount = computeRefundTotal(ret);
-      payload.process_wallet_refund = isWalletRefundRequired(ret);
-      payload.wallet_user_id = ret.user_id;
-      payload.wallet_reference_id = String(ret.id);
-      payload.wallet_description = `Refund for return request #${String(ret.id).slice(0, 8)}`;
     }
     updateReturnMutation.mutate(payload);
   };
@@ -452,10 +460,10 @@ const AdminReturns = () => {
                           <td className="px-2 py-2 text-right">
                             <div className="flex justify-end flex-wrap gap-1.5 min-w-[160px]">
                               <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => { setSelectedReturn(ret); setAdminNoteDraft(String(ret.admin_note || '')); }}><Eye className="mr-1 h-3 w-3" />View</Button>
-                              {ret.status === 'requested' ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateStatus(ret, 'approved')}><CheckCircle className="mr-1 h-3 w-3" />Approve</Button> : null}
-                              {ret.status === 'requested' ? <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => updateStatus(ret, 'rejected')}><XSquare className="mr-1 h-3 w-3" />Reject</Button> : null}
-                              {ret.status === 'approved' ? <Button size="sm" className="h-7 px-2 text-xs bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(ret, 'picked_up')}><Box className="mr-1 h-3 w-3" />Picked Up</Button> : null}
-                              {ret.status === 'picked_up' ? <Button size="sm" className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(ret, 'refunded')}><CreditCard className="mr-1 h-3 w-3" />Refunded</Button> : null}
+                              {ret.status === 'requested' ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateStatus(ret, 'approved')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'approved' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}Approve</Button> : null}
+                              {ret.status === 'requested' ? <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => updateStatus(ret, 'rejected')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'rejected' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XSquare className="mr-1 h-3 w-3" />}Reject</Button> : null}
+                              {ret.status === 'approved' ? <Button size="sm" className="h-7 px-2 text-xs bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(ret, 'picked_up')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'picked_up' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Box className="mr-1 h-3 w-3" />}Picked Up</Button> : null}
+                              {ret.status === 'picked_up' ? <Button size="sm" className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(ret, 'refunded')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'refunded' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CreditCard className="mr-1 h-3 w-3" />}Refunded</Button> : null}
                               {ret.status === 'rejected' || ret.status === 'refunded' ? <div className="text-[9px] font-black text-muted-foreground uppercase bg-muted/40 px-2 py-1 rounded border border-border/40 flex items-center gap-1"><Clock size={10} />Processed</div> : null}
                             </div>
                           </td>
@@ -504,10 +512,10 @@ const AdminReturns = () => {
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground mb-3">Proof Images</p>{parseImageUrls(selectedReturn.images).length ? <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{parseImageUrls(selectedReturn.images).map((url, idx) => <ProductImageViewer key={url} src={url} alt={`Proof ${idx + 1}`} className="h-32 w-full" />)}</div> : <p className="text-sm text-muted-foreground">No images uploaded.</p>}</CardContent></Card>
                 <Card><CardContent className="p-4 space-y-2"><p className="text-xs text-muted-foreground">Internal Admin Note</p><Textarea value={adminNoteDraft} onChange={(e) => setAdminNoteDraft(e.target.value)} placeholder="Private note..." /><div className="flex justify-end"><Button size="sm" variant="outline" onClick={() => updateReturnMutation.mutate({ id: String(selectedReturn.id), admin_note: adminNoteDraft.trim() ? adminNoteDraft.trim() : null })}>Save Note</Button></div></CardContent></Card>
                 <div className="flex flex-wrap justify-end gap-2">
-                  {selectedReturn.status === 'requested' ? <Button onClick={() => updateStatus(selectedReturn, 'approved')}>Approve</Button> : null}
-                  {selectedReturn.status === 'requested' ? <Button variant="destructive" onClick={() => updateStatus(selectedReturn, 'rejected')}>Reject</Button> : null}
-                  {selectedReturn.status === 'approved' ? <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(selectedReturn, 'picked_up')}>Mark Picked Up</Button> : null}
-                  {selectedReturn.status === 'picked_up' ? <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(selectedReturn, 'refunded')}>Mark Refunded</Button> : null}
+                  {selectedReturn.status === 'requested' ? <Button onClick={() => updateStatus(selectedReturn, 'approved')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'approved' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Approve</Button> : null}
+                  {selectedReturn.status === 'requested' ? <Button variant="destructive" onClick={() => updateStatus(selectedReturn, 'rejected')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'rejected' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Reject</Button> : null}
+                  {selectedReturn.status === 'approved' ? <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(selectedReturn, 'picked_up')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'picked_up' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Picked Up</Button> : null}
+                  {selectedReturn.status === 'picked_up' ? <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(selectedReturn, 'refunded')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'refunded' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Refunded</Button> : null}
                 </div>
               </div>
             ) : null}

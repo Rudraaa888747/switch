@@ -534,10 +534,15 @@ const Checkout = () => {
                   <h2 className="text-xl font-semibold mb-6">Payment Method</h2>
 
                   {canUseWallet && (
-                    <div className="rounded-2xl border border-border p-5 mb-6 bg-secondary/5 transition-all">
+                    <div 
+                      onClick={() => setUseWallet(!useWallet)}
+                      className={`rounded-2xl border p-5 mb-6 transition-all cursor-pointer select-none ${
+                        useWallet ? 'border-primary bg-primary/5' : 'border-border bg-secondary/5 hover:border-primary/50'
+                      }`}
+                    >
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                          <div className="rounded-full bg-secondary/70 p-3">
+                          <div className={`rounded-full p-3 transition-colors ${useWallet ? 'bg-primary/20' : 'bg-secondary/70'}`}>
                             <Wallet className="h-5 w-5 text-foreground" />
                           </div>
                           <div>
@@ -550,25 +555,18 @@ const Checkout = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                            useWallet ? 'border-primary bg-primary' : 'border-muted-foreground/30'
+                          }`}>
+                            {useWallet && <Check size={12} className="text-primary-foreground" />}
+                          </div>
                           <span className="text-sm font-medium">{useWallet ? 'Applied' : 'Use Wallet'}</span>
-                          <button
-                            type="button"
-                            onClick={() => setUseWallet(!useWallet)}
-                            className={`w-12 h-6 rounded-full p-1 transition-colors ${useWallet ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-                          >
-                            <motion.div
-                              layout
-                              className="w-4 h-4 bg-white rounded-full shadow-sm"
-                              animate={{ x: useWallet ? 24 : 0 }}
-                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                            />
-                          </button>
                         </div>
                       </div>
                       <p className="mt-3 text-sm text-muted-foreground border-t border-border/50 pt-3">
                         {useWallet 
                           ? `₹${maxWalletPossible} will be deducted from your wallet. Remaining payment will use the selected method.` 
-                          : 'Toggle to apply your wallet balance to this order.'}
+                          : 'Click to apply your wallet balance to this order.'}
                       </p>
                     </div>
                   )}

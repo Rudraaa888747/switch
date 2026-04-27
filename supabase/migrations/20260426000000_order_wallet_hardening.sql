@@ -207,7 +207,7 @@ BEGIN
   VALUES (
     p_order_id,
     p_user_id,
-    p_status,
+    p_status::public.order_status,
     p_estimated_delivery,
     p_subtotal,
     p_tax,
