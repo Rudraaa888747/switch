@@ -13,10 +13,10 @@ const Layout = ({ children, showFooter = true }: LayoutProps) => {
     <div className="min-h-screen flex flex-col">
       {/* Scroll progress indicator */}
       <ScrollProgress />
-      
+
       <Header />
-      
-      <motion.main 
+
+      <motion.main
         className="flex-1 pt-16 md:pt-20"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -24,7 +24,7 @@ const Layout = ({ children, showFooter = true }: LayoutProps) => {
       >
         {children}
       </motion.main>
-      
+
       {showFooter && (
         <motion.div
           initial={{ opacity: 0, y: 30 }}

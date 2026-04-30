@@ -1,0 +1,774 @@
+﻿diff --git a/src/pages/Home.tsx b/src/pages/Home.tsx
+index 2fd9cd0..72252ea 100644
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -1,286 +1,539 @@
+ import { Link } from 'react-router-dom';
+-import { motion, type Easing, useScroll, useTransform } from 'framer-motion';
+-import { ArrowRight } from 'lucide-react';
+-import { useRef } from 'react';
++import {
++  motion, type Easing, useScroll, useTransform,
++  AnimatePresence, useInView,
++} from 'framer-motion';
++import { ArrowRight, ChevronDown, Star, Shield, RotateCcw, Zap } from 'lucide-react';
++import { useRef, useState, useEffect, useCallback } from 'react';
+ import Layout from '@/components/layout/Layout';
+ import ProductCard from '@/components/products/ProductCard';
+ import { products } from '@/data/products';
+-import heroBanner from '@/assets/hero-banner.webp';
+-import categoryOuterwear from '@/assets/category-outerwear.webp';
+-import categoryBottoms from '@/assets/category-bottoms.webp';
+-import categoryAccessories from '@/assets/category-accessories.webp';
+-import { ScrollReveal, StaggerContainer, StaggerItem } from '@/components/animations/PageTransition';
+-import { LetterByLetter } from '@/components/animations/TypewriterText';
+ 
+-// Premium easing curve
+-const premiumEase: Easing = [0.4, 0, 0.2, 1];
++// ΓöÇΓöÇΓöÇ HERO IMAGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// High-quality fashion/clothing hero from Unsplash (free, no auth needed)
++const HERO_IMAGE = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1800&q=85&auto=format&fit=crop';
++const EDITORIAL_IMAGE = 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&q=80&auto=format&fit=crop';
++const CAT_IMAGES = {
++  outerwear: 'https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?w=600&q=80&auto=format&fit=crop',
++  bottoms: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=80&auto=format&fit=crop',
++  accessories: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&q=80&auto=format&fit=crop',
++};
++
++// ΓöÇΓöÇΓöÇ EASINGS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const ease: Easing = [0.4, 0, 0.2, 1];
++const spring = { type: 'spring', stiffness: 180, damping: 22 } as const;
++
++// ΓöÇΓöÇΓöÇ MARQUEE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const MARQUEE_ITEMS = [
++  'Free shipping on orders over Γé╣999',
++  'Γùå',
++  'Premium modular design',
++  'Γùå',
++  'Easy 30-day returns',
++  'Γùå',
++  'Sustainably crafted',
++  'Γùå',
++  'New drops every Friday',
++  'Γùå',
++];
++
++const Marquee = ({ inverted = false }: { inverted?: boolean }) => {
++  const items = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS];
++  return (
++    <div className={`overflow-hidden py-3 ${inverted ? 'bg-background border-y border-border/30' : 'bg-foreground'}`}>
++      <motion.div
++        className="flex gap-10 whitespace-nowrap"
++        animate={{ x: ['0%', '-50%'] }}
++        transition={{ duration: 30, ease: 'linear', repeat: Infinity }}
++      >
++        {items.map((item, i) => (
++          <span
++            key={i}
++            className={`inline-block text-[10px] uppercase tracking-[0.2em] font-medium shrink-0 ${inverted ? 'text-foreground/50' : 'text-background/70'}`}
++          >
++            {item}
++          </span>
++        ))}
++      </motion.div>
++    </div>
++  );
++};
++
++// ΓöÇΓöÇΓöÇ ANIMATED COUNTER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const Counter = ({ to, suffix = '' }: { to: number; suffix?: string }) => {
++  const [val, setVal] = useState(0);
++  const ref = useRef<HTMLSpanElement>(null);
++  const inView = useInView(ref, { once: true, margin: '-80px' });
++
++  useEffect(() => {
++    if (!inView) return;
++    let frame: number;
++    const start = performance.now();
++    const dur = 1600;
++    const tick = (now: number) => {
++      const p = Math.min((now - start) / dur, 1);
++      const eased = 1 - Math.pow(1 - p, 3);
++      setVal(Math.round(eased * to));
++      if (p < 1) frame = requestAnimationFrame(tick);
++    };
++    frame = requestAnimationFrame(tick);
++    return () => cancelAnimationFrame(frame);
++  }, [inView, to]);
++
++  return <span ref={ref}>{val.toLocaleString()}{suffix}</span>;
++};
+ 
++// ΓöÇΓöÇΓöÇ REVEAL WRAPPER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const Reveal = ({
++  children, delay = 0, className = '', y = 28,
++}: {
++  children: React.ReactNode; delay?: number; className?: string; y?: number;
++}) => {
++  const ref = useRef<HTMLDivElement>(null);
++  const inView = useInView(ref, { once: true, margin: '-60px' });
++  return (
++    <motion.div
++      ref={ref}
++      className={className}
++      initial={{ opacity: 0, y }}
++      animate={inView ? { opacity: 1, y: 0 } : {}}
++      transition={{ duration: 0.7, delay, ease }}
++    >
++      {children}
++    </motion.div>
++  );
++};
++
++// ΓöÇΓöÇΓöÇ HOME PAGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ const Home = () => {
+   const heroRef = useRef<HTMLDivElement>(null);
+-  const { scrollYProgress } = useScroll({
+-    target: heroRef,
+-    offset: ['start start', 'end start'],
++  const [activeTab, setActiveTab] = useState(0);
++  const [hovered, setHovered] = useState<number | null>(null);
++
++  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
++  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '28%']);
++  const imgSc = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
++  const txtY = useTransform(scrollYProgress, [0, 1], ['0%', '12%']);
++  const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
++
++  const filteredProducts = products.filter(p => {
++    if (activeTab === 0) return true;
++    if (activeTab === 1) return ['jackets', 'hoodies'].includes(p.subcategory);
++    if (activeTab === 2) return ['jeans', 'pants'].includes(p.subcategory);
++    if (activeTab === 3) return ['accessories', 'footwear'].includes(p.subcategory);
++    return true;
+   });
+   
+-  // Parallax effect for hero image
+-  const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '30%']);
+-  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
+-  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.3]);
+-
+-  // Get products without modifying them - just selecting first 8
+-  const displayProducts = products.slice(0, 8);
++  const displayProducts = filteredProducts.slice(0, 8);
+ 
+   const categories = [
+-    {
+-      title: 'Modular Outerwear',
+-      image: categoryOuterwear,
+-      link: '/shop?subcategory=jackets',
+-    },
+-    {
+-      title: 'Versatile Bottoms',
+-      image: categoryBottoms,
+-      link: '/shop?subcategory=pants',
+-    },
+-    {
+-      title: 'Adaptable Accessories',
+-      image: categoryAccessories,
+-      link: '/shop?subcategory=accessories',
+-    },
++    { title: 'Modular Outerwear', sub: 'Layer & transform', image: CAT_IMAGES.outerwear, link: '/shop?subcategory=jackets', count: '24' },
++    { title: 'Versatile Bottoms', sub: 'Move freely', image: CAT_IMAGES.bottoms, link: '/shop?subcategory=pants', count: '18' },
++    { title: 'Accessories', sub: 'Complete the look', image: CAT_IMAGES.accessories, link: '/shop?subcategory=accessories', count: '32' },
+   ];
+ 
++  const perks = [
++    { Icon: Zap, title: 'Fast delivery', desc: '2ΓÇô4 day shipping across India' },
++    { Icon: RotateCcw, title: 'Easy returns', desc: 'Hassle-free 30-day return window' },
++    { Icon: Shield, title: 'Secure payments', desc: 'UPI, cards & wallets accepted' },
++    { Icon: Star, title: 'Premium quality', desc: 'Crafted to last seasons, not trends' },
++  ];
++
++  const tabs = ['All', 'Outerwear', 'Bottoms', 'Accessories'];
++
++  // Newsletter state
++  const [email, setEmail] = useState('');
++  const [subbed, setSubbed] = useState(false);
++  const handleSub = useCallback(() => {
++    if (email.includes('@')) setSubbed(true);
++  }, [email]);
++
+   return (
+     <Layout>
+-      {/* Hero Section with Parallax */}
+-      <section 
+-        ref={heroRef}
+-        className="relative h-[80vh] md:h-[90vh] flex items-center justify-center overflow-hidden"
+-      >
+-        {/* Hero Image with Parallax and Premium Zoom Animation */}
+-        <motion.div 
+-          className="absolute inset-0"
+-          style={{ y: heroY, scale: heroScale, opacity: heroOpacity }}
+-        >
+-          <motion.img
+-            src={heroBanner}
+-            alt="SWITCH Collection"
+-            className="w-full h-full object-cover object-center"
+-            initial={{ scale: 1.1 }}
+-            animate={{ scale: 1 }}
+-            transition={{ duration: 1.8, ease: premiumEase }}
++
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  HERO                                                Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section ref={heroRef} className="relative h-[92vh] min-h-[580px] flex items-end overflow-hidden">
++
++        {/* Parallax image */}
++        <motion.div className="absolute inset-0" style={{ y: imgY, scale: imgSc }}>
++          <img
++            src={HERO_IMAGE}
++            alt="SWITCH ΓÇö modular fashion"
++            className="w-full h-full object-cover object-top"
++            loading="eager"
+           />
+-          {/* Dark overlay with animated reveal */}
+-          <motion.div 
+-            className="absolute inset-0 bg-black/40"
+-            initial={{ opacity: 0 }}
+-            animate={{ opacity: 1 }}
+-            transition={{ duration: 1, delay: 0.3 }}
++          {/* Multi-stop gradient for great text legibility */}
++          <div
++            className="absolute inset-0"
++            style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.72) 100%)' }}
+           />
+         </motion.div>
+-        
+-        <div className="relative z-10 text-center px-4">
+-          {/* Text backdrop for enhanced readability */}
+-          <motion.div 
+-            className="bg-black/30 backdrop-blur-sm px-8 py-10 md:px-16 md:py-14 rounded-sm"
+-            initial={{ opacity: 0, scale: 0.95 }}
+-            animate={{ opacity: 1, scale: 1 }}
+-            transition={{ duration: 0.8, delay: 0.4, ease: premiumEase }}
++
++        {/* Hero text block ΓÇö bottom-left, parallax */}
++        <motion.div
++          className="relative z-10 w-full pb-14 md:pb-20 px-5 sm:px-8 lg:px-16 max-w-7xl mx-auto"
++          style={{ y: txtY, opacity }}
++        >
++          {/* Eyebrow */}
++          <motion.p
++            className="text-white/60 text-[10px] uppercase tracking-[0.35em] mb-4"
++            initial={{ opacity: 0, y: 14 }}
++            animate={{ opacity: 1, y: 0 }}
++            transition={{ duration: 0.6, delay: 0.4 }}
+           >
+-            {/* Animated headline with letter-by-letter effect */}
++            SS 2025 ΓÇö New Collection
++          </motion.p>
++
++          {/* Headline ΓÇö split lines */}
++          <div className="overflow-hidden mb-2">
+             <motion.h1
+-              initial={{ opacity: 0 }}
+-              animate={{ opacity: 1 }}
+-              transition={{ duration: 0.5, delay: 0.6 }}
+-              className="text-3xl md:text-5xl lg:text-6xl font-light tracking-[0.15em] md:tracking-[0.2em] text-white mb-6 drop-shadow-lg"
++              className="text-[clamp(2.8rem,8vw,7rem)] font-light text-white leading-[1.0] tracking-tight"
++              initial={{ y: '100%', opacity: 0 }}
++              animate={{ y: 0, opacity: 1 }}
++              transition={{ duration: 1, delay: 0.55, ease }}
+             >
+-              <LetterByLetter 
+-                text="ADAPT. TRANSFORM. EXPRESS." 
+-                delay={0.8}
+-                className="text-white"
+-              />
++              Adapt.
+             </motion.h1>
+-            
+-            {/* CTA with bounce effect */}
+-            <motion.div
+-              initial={{ opacity: 0, y: 30, scale: 0.9 }}
+-              animate={{ opacity: 1, y: 0, scale: 1 }}
+-              transition={{ 
+-                duration: 0.6, 
+-                delay: 1.8, 
+-                ease: premiumEase,
+-                type: 'spring',
+-                stiffness: 200,
+-                damping: 15,
+-              }}
++          </div>
++          <div className="overflow-hidden mb-2">
++            <motion.h1
++              className="text-[clamp(2.8rem,8vw,7rem)] font-light text-white/85 leading-[1.0] tracking-tight"
++              initial={{ y: '100%', opacity: 0 }}
++              animate={{ y: 0, opacity: 1 }}
++              transition={{ duration: 1, delay: 0.72, ease }}
+             >
+-              <Link
+-                to="/shop"
+-                className="inline-flex items-center gap-2 bg-white text-black px-8 py-3 uppercase tracking-widest text-xs font-medium 
+-                         transition-all duration-300 hover:bg-black hover:text-white hover:scale-[1.02] active:scale-[0.98]
+-                         btn-shine group"
+-              >
+-                Shop Collection
+-                <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+-              </Link>
+-            </motion.div>
++              Transform.
++            </motion.h1>
++          </div>
++          <div className="overflow-hidden mb-8">
++            <motion.h1
++              className="text-[clamp(2.8rem,8vw,7rem)] font-light text-white/70 leading-[1.0] tracking-tight"
++              initial={{ y: '100%', opacity: 0 }}
++              animate={{ y: 0, opacity: 1 }}
++              transition={{ duration: 1, delay: 0.89, ease }}
++            >
++              Express.
++            </motion.h1>
++          </div>
++
++          {/* Subline + CTAs */}
++          <motion.div
++            className="flex flex-col sm:flex-row items-start sm:items-center gap-4"
++            initial={{ opacity: 0, y: 20 }}
++            animate={{ opacity: 1, y: 0 }}
++            transition={{ duration: 0.7, delay: 1.3 }}
++          >
++            <Link
++              to="/shop"
++              className="inline-flex items-center gap-2.5 bg-white text-black text-[11px] uppercase tracking-[0.18em] font-medium px-7 py-3.5
++                         hover:bg-black hover:text-white transition-all duration-300 group"
++            >
++              Shop Collection
++              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
++            </Link>
++            <Link
++              to="/collections"
++              className="inline-flex items-center gap-2 text-white/75 text-[11px] uppercase tracking-[0.18em] hover:text-white transition-colors duration-200 group"
++            >
++              Explore looks
++              <ArrowRight size={12} className="transition-transform duration-300 group-hover:translate-x-1" />
++            </Link>
+           </motion.div>
+-        </div>
++        </motion.div>
+ 
+         {/* Scroll indicator */}
+         <motion.div
+-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
+-          initial={{ opacity: 0, y: -10 }}
+-          animate={{ opacity: 1, y: 0 }}
+-          transition={{ delay: 2.2, duration: 0.6 }}
++          className="absolute bottom-7 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5"
++          initial={{ opacity: 0 }}
++          animate={{ opacity: 1 }}
++          transition={{ delay: 2.2 }}
+         >
+           <motion.div
+-            className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center"
+-            animate={{ y: [0, 5, 0] }}
+-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
++            animate={{ y: [0, 6, 0] }}
++            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+           >
+-            <motion.div
+-              className="w-1 h-2 bg-white/70 rounded-full mt-2"
+-              animate={{ opacity: [1, 0.3, 1], y: [0, 8, 0] }}
+-              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+-            />
++            <ChevronDown size={18} className="text-white/40" strokeWidth={1.5} />
+           </motion.div>
+         </motion.div>
+       </section>
+ 
+-      {/* Feature Strip - Three Categories with staggered slide-in */}
+-      <section className="py-16 md:py-24 bg-background">
+-        <div className="container-custom">
+-          <StaggerContainer className="grid md:grid-cols-3 gap-8 md:gap-12" staggerDelay={0.15}>
+-            {categories.map((category, index) => (
+-              <StaggerItem key={category.title}>
+-                <Link to={category.link} className="group block category-card">
+-                  <motion.div 
+-                    className="text-center mb-6"
+-                    initial={{ opacity: 0, x: index === 0 ? -30 : index === 2 ? 30 : 0 }}
+-                    whileInView={{ opacity: 1, x: 0 }}
+-                    viewport={{ once: true }}
+-                    transition={{ delay: 0.2 + index * 0.1, duration: 0.6, ease: premiumEase }}
+-                  >
+-                    <h3 className="text-xs uppercase tracking-[0.2em] font-medium">
+-                      {category.title}
+-                    </h3>
+-                  </motion.div>
+-                  <motion.div 
+-                    className="aspect-square overflow-hidden bg-muted relative"
+-                    whileHover={{ scale: 1.02 }}
+-                    transition={{ duration: 0.4, ease: premiumEase }}
+-                  >
++      {/* ΓöÇΓöÇ TRUST MARQUEE ΓöÇΓöÇ */}
++      <Marquee />
++
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  CATEGORIES                                          Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="py-20 md:py-32">
++        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
++          <Reveal className="flex items-end justify-between mb-12 md:mb-16">
++            <div>
++              <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-2">Browse</p>
++              <h2 className="text-2xl md:text-3xl font-light tracking-wide">Shop by Category</h2>
++            </div>
++            <Link to="/shop" className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors group">
++              View all
++              <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
++            </Link>
++          </Reveal>
++
++          {/* Category grid ΓÇö portrait cards */}
++          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
++            {categories.map((cat, i) => (
++              <Reveal key={cat.title} delay={i * 0.1}>
++                <Link
++                  to={cat.link}
++                  className="group block"
++                  onMouseEnter={() => setHovered(i)}
++                  onMouseLeave={() => setHovered(null)}
++                >
++                  <div className="relative overflow-hidden" style={{ aspectRatio: '3/4' }}>
+                     <motion.img
+-                      src={category.image}
+-                      alt={category.title}
++                      src={cat.image}
++                      alt={cat.title}
+                       className="w-full h-full object-cover"
+-                      whileHover={{ scale: 1.08 }}
+-                      transition={{ duration: 0.6, ease: premiumEase }}
+-                    />
+-                    {/* 3D depth shadow on hover */}
+-                    <motion.div
+-                      className="absolute inset-0 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
++                      animate={{ scale: hovered === i ? 1.06 : 1 }}
++                      transition={{ duration: 0.7, ease }}
+                     />
+-                  </motion.div>
++                    {/* Gradient overlay */}
++                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
++
++                    {/* Piece count */}
++                    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm text-[9px] uppercase tracking-[0.2em] px-2.5 py-1 font-medium">
++                      {cat.count} pieces
++                    </div>
++
++                    {/* Bottom label ΓÇö always visible */}
++                    <div className="absolute bottom-0 left-0 right-0 p-4 md:p-5">
++                      <p className="text-white/70 text-[9px] uppercase tracking-[0.25em] mb-1">{cat.sub}</p>
++                      <div className="flex items-center justify-between">
++                        <h3 className="text-white text-sm uppercase tracking-[0.15em] font-medium">{cat.title}</h3>
++                        <motion.div
++                          animate={{ opacity: hovered === i ? 1 : 0, x: hovered === i ? 0 : -6 }}
++                          transition={{ duration: 0.25 }}
++                        >
++                          <ArrowRight size={14} className="text-white" />
++                        </motion.div>
++                      </div>
++                    </div>
++                  </div>
+                 </Link>
+-              </StaggerItem>
++              </Reveal>
+             ))}
+-          </StaggerContainer>
++          </div>
+         </div>
+       </section>
+ 
+-      {/* Product Grid with staggered fade-up */}
+-      <section className="py-16 md:py-24 bg-background">
+-        <div className="container-custom">
+-          <ScrollReveal className="text-center mb-12">
+-            <motion.h2 
+-              className="text-xs uppercase tracking-[0.2em] font-medium text-muted-foreground mb-2"
+-              initial={{ opacity: 0 }}
+-              whileInView={{ opacity: 1 }}
+-              viewport={{ once: true }}
+-              transition={{ delay: 0.1, duration: 0.5 }}
+-            >
+-              Featured
+-            </motion.h2>
+-            <motion.p 
+-              className="text-2xl md:text-3xl font-light tracking-wide"
+-              initial={{ opacity: 0, y: 10 }}
+-              whileInView={{ opacity: 1, y: 0 }}
+-              viewport={{ once: true }}
+-              transition={{ delay: 0.2, duration: 0.5 }}
+-            >
+-              New Arrivals
+-            </motion.p>
+-          </ScrollReveal>
+-
+-          <div className="grid-product">
+-            {displayProducts.map((product, index) => (
+-              <ProductCard key={product.id} product={product} index={index} />
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  STATS                                               Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="border-y border-border/30 py-12 md:py-16 bg-muted/20">
++        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
++          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
++            {[
++              { n: 50000, s: '+', l: 'Happy customers' },
++              { n: 120, s: '+', l: 'Modular pieces' },
++              { n: 98, s: '%', l: 'Satisfaction' },
++              { n: 4, s: ' yrs', l: 'Of innovation' },
++            ].map((stat, i) => (
++              <Reveal key={stat.l} delay={i * 0.08} className="text-center">
++                <p className="text-3xl md:text-4xl font-light tracking-tight mb-1.5">
++                  <Counter to={stat.n} suffix={stat.s} />
++                </p>
++                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{stat.l}</p>
++              </Reveal>
+             ))}
+           </div>
++        </div>
++      </section>
+ 
+-          <ScrollReveal delay={0.4} className="text-center mt-12">
+-            <Link
+-              to="/shop"
+-              className="inline-flex items-center gap-2 btn-outline btn-shine group"
+-            >
+-              View All Products
+-              <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  PRODUCTS                                            Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="py-20 md:py-32">
++        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
++          {/* Header + tabs */}
++          <Reveal className="mb-10 md:mb-14">
++            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5 mb-6">
++              <div>
++                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-2">Just dropped</p>
++                <h2 className="text-2xl md:text-3xl font-light tracking-wide">New Arrivals</h2>
++              </div>
++              <Link to="/shop" className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors group">
++                View all <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
++              </Link>
++            </div>
++
++            {/* Filter tabs */}
++            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
++              {tabs.map((tab, i) => (
++                <button
++                  key={tab}
++                  onClick={() => setActiveTab(i)}
++                  className={`shrink-0 px-4 py-2 text-[10px] uppercase tracking-[0.18em] font-medium transition-all duration-200 border
++                    ${activeTab === i
++                      ? 'bg-foreground text-background border-foreground'
++                      : 'bg-transparent text-muted-foreground border-border/40 hover:border-foreground/40 hover:text-foreground'
++                    }`}
++                >
++                  {tab}
++                </button>
++              ))}
++            </div>
++          </Reveal>
++
++          {/* Product grid */}
++          {displayProducts.length > 0 ? (
++            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
++              {displayProducts.map((product, index) => (
++                <Reveal key={product.id} delay={Math.min(index * 0.05, 0.3)} y={20}>
++                  <ProductCard product={product} index={index} />
++                </Reveal>
++              ))}
++            </div>
++          ) : (
++            <Reveal delay={0.1} y={20}>
++              <div className="py-16 text-center text-muted-foreground text-sm tracking-widest border border-border/40 bg-muted/5">
++                NEW DROPS COMING SOON
++              </div>
++            </Reveal>
++          )}
++
++          {/* Mobile CTA */}
++          <Reveal delay={0.2} className="text-center mt-10 sm:hidden">
++            <Link to="/shop" className="inline-flex items-center gap-2 border border-foreground/30 px-8 py-3 text-[11px] uppercase tracking-widest hover:bg-foreground hover:text-background transition-all duration-200 group">
++              View all products
++              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+             </Link>
+-          </ScrollReveal>
++          </Reveal>
+         </div>
+       </section>
+ 
+-      {/* Newsletter Section with slide-up animation */}
+-      <ScrollReveal>
+-        <section className="py-16 md:py-24 bg-foreground text-background">
+-          <div className="container-custom text-center">
+-            <motion.h2 
+-              className="text-2xl md:text-3xl font-light tracking-wide mb-4"
+-              initial={{ opacity: 0, y: 20 }}
+-              whileInView={{ opacity: 1, y: 0 }}
+-              viewport={{ once: true }}
+-              transition={{ duration: 0.6, ease: premiumEase }}
+-            >
+-              Stay Connected
+-            </motion.h2>
+-            <motion.p 
+-              className="text-background/70 mb-8 max-w-md mx-auto"
+-              initial={{ opacity: 0 }}
+-              whileInView={{ opacity: 1 }}
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  EDITORIAL BANNER                                    Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="relative overflow-hidden" style={{ minHeight: '420px' }}>
++        <div className="grid md:grid-cols-2 min-h-[420px]">
++          {/* Image side */}
++          <div className="relative h-72 md:h-auto overflow-hidden">
++            <motion.img
++              src={EDITORIAL_IMAGE}
++              alt="SWITCH philosophy"
++              className="w-full h-full object-cover"
++              initial={{ scale: 1.06 }}
++              whileInView={{ scale: 1 }}
+               viewport={{ once: true }}
+-              transition={{ delay: 0.2, duration: 0.5 }}
+-            >
+-              Subscribe for exclusive releases and style updates
+-            </motion.p>
+-            <motion.form 
+-              className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto"
+-              initial={{ opacity: 0, y: 20 }}
+-              whileInView={{ opacity: 1, y: 0 }}
+-              viewport={{ once: true }}
+-              transition={{ delay: 0.3, duration: 0.5 }}
+-            >
+-              <motion.input
+-                type="email"
+-                placeholder="Enter your email"
+-                className="flex-1 px-4 py-3 bg-transparent border border-background/30 text-background placeholder:text-background/50 
+-                         focus:outline-none focus:border-background transition-all duration-300"
+-                whileFocus={{ scale: 1.02, borderColor: 'white' }}
+-              />
+-              <motion.button 
+-                type="submit"
+-                className="px-8 py-3 bg-background text-foreground uppercase tracking-widest text-xs font-medium
+-                         transition-all duration-300 hover:bg-background/90"
+-                whileHover={{ scale: 1.02 }}
+-                whileTap={{ scale: 0.98 }}
++              transition={{ duration: 1.4, ease }}
++            />
++            <div className="absolute inset-0 bg-black/20" />
++          </div>
++
++          {/* Text side */}
++          <div className="bg-foreground text-background flex items-center px-8 md:px-14 py-14 md:py-20">
++            <Reveal y={24}>
++              <p className="text-background/45 text-[10px] uppercase tracking-[0.3em] mb-4">Our Philosophy</p>
++              <h2 className="text-3xl md:text-4xl font-light tracking-wide leading-snug mb-5">
++                One wardrobe,<br />infinite expressions.
++              </h2>
++              <p className="text-background/55 text-sm font-light leading-relaxed mb-8 max-w-xs">
++                Every SWITCH piece is engineered to connect, layer and transform ΓÇö so your wardrobe grows with your lifestyle, not against it.
++              </p>
++              <Link
++                to="/about"
++                className="inline-flex items-center gap-2 border border-background/30 text-background px-7 py-3 text-[11px] uppercase tracking-[0.18em]
++                           hover:bg-background hover:text-foreground transition-all duration-300 group"
+               >
+-                Subscribe
+-              </motion.button>
+-            </motion.form>
++                Our Story
++                <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
++              </Link>
++            </Reveal>
++          </div>
++        </div>
++      </section>
++
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  PERKS                                               Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="py-16 md:py-24 bg-muted/20 border-y border-border/30">
++        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
++          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
++            {perks.map(({ Icon, title, desc }, i) => (
++              <Reveal key={title} delay={i * 0.08} className="text-center">
++                <div className="w-10 h-10 rounded-full border border-border/50 flex items-center justify-center mx-auto mb-4">
++                  <Icon size={16} strokeWidth={1.5} className="text-foreground/70" />
++                </div>
++                <p className="text-[11px] uppercase tracking-[0.18em] font-medium mb-1.5">{title}</p>
++                <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
++              </Reveal>
++            ))}
+           </div>
+-        </section>
+-      </ScrollReveal>
++        </div>
++      </section>
++
++      {/* ΓöÇΓöÇ SUBTLE MARQUEE ΓöÇΓöÇ */}
++      <Marquee inverted />
++
++      {/* ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù */}
++      {/* Γòæ  NEWSLETTER                                          Γòæ */}
++      {/* ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥ */}
++      <section className="py-20 md:py-28 bg-foreground text-background">
++        <div className="max-w-2xl mx-auto px-5 sm:px-8 text-center">
++          <Reveal y={20}>
++            <p className="text-background/45 text-[10px] uppercase tracking-[0.3em] mb-3">Join the community</p>
++            <h2 className="text-3xl md:text-4xl font-light tracking-wide mb-4">Stay in the loop</h2>
++            <p className="text-background/50 text-sm font-light leading-relaxed mb-10 max-w-sm mx-auto">
++              Early drops, exclusive offers, and style guides ΓÇö directly in your inbox. No clutter, ever.
++            </p>
++
++            <AnimatePresence mode="wait">
++              {!subbed ? (
++                <motion.div
++                  key="form"
++                  className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto"
++                  initial={{ opacity: 0, y: 12 }}
++                  animate={{ opacity: 1, y: 0 }}
++                  exit={{ opacity: 0, y: -8 }}
++                >
++                  <input
++                    type="email"
++                    value={email}
++                    onChange={e => setEmail(e.target.value)}
++                    onKeyDown={e => e.key === 'Enter' && handleSub()}
++                    placeholder="your@email.com"
++                    className="flex-1 bg-transparent border-b border-background/25 text-background placeholder:text-background/30
++                               px-1 py-3 text-sm focus:outline-none focus:border-background/70 transition-colors"
++                  />
++                  <motion.button
++                    onClick={handleSub}
++                    className="bg-background text-foreground text-[11px] uppercase tracking-[0.18em] font-medium px-7 py-3 whitespace-nowrap
++                               hover:opacity-85 transition-opacity"
++                    whileTap={{ scale: 0.97 }}
++                  >
++                    Subscribe
++                  </motion.button>
++                </motion.div>
++              ) : (
++                <motion.div
++                  key="done"
++                  initial={{ opacity: 0, scale: 0.95 }}
++                  animate={{ opacity: 1, scale: 1 }}
++                  className="text-sm text-background/75 tracking-wide"
++                >
++                  Γ£ô &nbsp;You're in ΓÇö welcome to SWITCH.
++                </motion.div>
++              )}
++            </AnimatePresence>
++
++            <p className="text-background/25 text-[10px] tracking-widest uppercase mt-5">
++              No spam ┬╖ Unsubscribe anytime
++            </p>
++          </Reveal>
++        </div>
++      </section>
++
+     </Layout>
+   );
+ };
+ 
+-export default Home;
++export default Home;
+\ No newline at end of file

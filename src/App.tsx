@@ -15,6 +15,7 @@ import FloatingChatWidget from "./components/chat/FloatingChatWidget";
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Home = lazy(() => import("./pages/Home"));
+const About = lazy(() => import("./pages/About"));
 const Shop = lazy(() => import("./pages/Shop"));
 const Men = lazy(() => import("./pages/Men"));
 const Women = lazy(() => import("./pages/Women"));
@@ -75,6 +76,7 @@ const App = () => (
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/forgot-password" element={<ForgotPassword />} />
                       <Route path="/" element={<Home />} />
+                      <Route path="/about" element={<About />} />
                       <Route path="/shop" element={<Shop />} />
                       <Route path="/men" element={<Men />} />
                       <Route path="/women" element={<Women />} />
