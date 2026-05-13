@@ -972,7 +972,7 @@ BEGIN
     )
     SELECT
       MIN(legacy.id::text)::uuid,
-      COALESCE(NULLIF(legacy.order_id, ''), 'LEGACY-' || left(MIN(legacy.id::text), 8)),
+      COALESCE('LEGACY-' || left(MIN(legacy.id::text), 8)),
       legacy.user_id,
       CASE lower(COALESCE(MAX(legacy.status), ''))
         WHEN 'order placed' THEN 'pending'::public.order_status
@@ -1026,7 +1026,7 @@ BEGIN
       COALESCE(MIN(legacy.created_at), now()),
       COALESCE(MAX(legacy.updated_at), MAX(legacy.created_at), now())
     FROM public.orders_legacy_line_items AS legacy
-    GROUP BY COALESCE(NULLIF(legacy.order_id, ''), legacy.id::text), legacy.user_id
+    GROUP BY legacy.id, legacy.user_id
     ON CONFLICT (id) DO NOTHING;
 
     INSERT INTO public.order_items (
@@ -1059,7 +1059,7 @@ BEGIN
       COALESCE(legacy.updated_at, legacy.created_at, now())
     FROM public.orders_legacy_line_items AS legacy
     JOIN public.orders AS orders_new
-      ON orders_new.order_number = COALESCE(NULLIF(legacy.order_id, ''), 'LEGACY-' || left(legacy.id::text, 8))
+      ON orders_new.order_number = 'LEGACY-' || left(legacy.id::text, 8)
     ON CONFLICT DO NOTHING;
   END IF;
 END
