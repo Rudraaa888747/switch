@@ -448,39 +448,20 @@ BEGIN
         WHEN 'cancelled' THEN 'cancelled'::public.order_status
         ELSE 'pending'::public.order_status
       END,
-      CASE
-        WHEN lower(COALESCE(MAX(legacy.payment_method), '')) = 'cod' THEN 'pending'::public.payment_status
-        ELSE 'paid'::public.payment_status
-      END,
+      'paid'::public.payment_status,
       'INR',
       SUM(COALESCE(legacy.total_price, 0)),
-      COALESCE(MAX(legacy.discount_applied), 0),
-      COALESCE(MAX(legacy.tax), 0),
-      COALESCE(MAX(legacy.shipping_cost), 0),
-      COALESCE(MAX(legacy.grand_total), SUM(COALESCE(legacy.total_price, 0)) + COALESCE(MAX(legacy.tax), 0) + COALESCE(MAX(legacy.shipping_cost), 0)),
+      0,
+      0,
+      0,
+      SUM(COALESCE(legacy.total_price, 0)),
       SUM(COALESCE(legacy.quantity, 1)),
-      COALESCE(MAX(NULLIF(legacy.customer_name, '')), 'Guest Customer'),
-      MAX(NULLIF(legacy.customer_email, '')),
-      MAX(NULLIF(legacy.customer_phone, '')),
-      jsonb_strip_nulls(
-        jsonb_build_object(
-          'line1', MAX(NULLIF(legacy.shipping_address, '')),
-          'city', MAX(NULLIF(legacy.shipping_city, '')),
-          'state', MAX(NULLIF(legacy.shipping_state, '')),
-          'postal_code', MAX(NULLIF(legacy.shipping_pincode, '')),
-          'country', 'IN'
-        )
-      ),
-      jsonb_strip_nulls(
-        jsonb_build_object(
-          'line1', MAX(NULLIF(legacy.shipping_address, '')),
-          'city', MAX(NULLIF(legacy.shipping_city, '')),
-          'state', MAX(NULLIF(legacy.shipping_state, '')),
-          'postal_code', MAX(NULLIF(legacy.shipping_pincode, '')),
-          'country', 'IN'
-        )
-      ),
-      MAX(NULLIF(legacy.payment_method, '')),
+      'Guest Customer',
+      NULL,
+      NULL,
+      '{}'::jsonb,
+      '{}'::jsonb,
+      'manual',
       jsonb_build_object('migrated_from', 'orders_legacy_line_items'),
       COALESCE(MIN(legacy.order_date), MIN(legacy.created_at), now()),
       CASE
