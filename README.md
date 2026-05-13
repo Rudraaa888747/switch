@@ -24,10 +24,10 @@
 
 <br/>
 
-> **SWITCH** is a full-stack, production-ready fashion e-commerce platform built from scratch.
-> It features a complete storefront, AI-powered style recommendations, a real-time admin dashboard
-> with predictive analytics, full order & return lifecycle management, and a sleek dark-mode UI —
-> all powered by React 18, TypeScript, Supabase & Tailwind CSS.
+> **SWITCH** is a full-stack, production-ready fashion e-commerce platform built with modern web technologies.
+> It features a cinematic dark-mode storefront, AI-powered style recommendations, a real-time admin dashboard
+> with predictive analytics, a fully functional wallet system, real-time returns tracking, optimized checkout
+> via a custom database function, and a CI/CD pipeline — all powered by React 18, TypeScript, Supabase & Tailwind CSS.
 
 <br/>
 
@@ -65,16 +65,23 @@
 
 <br/>
 
-### 🛍️ User Side
-
-<br/>
-
-#### 🏠 Homepage
+### 🔐 Authentication — Cinematic UI
 
 <div align="center">
-  <img src="./Screenshots/Homepage.png" alt="SWITCH Homepage" width="100%"/>
-  <br/><br/>
-  <em>Full-page hero banner with "Adapt. Transform. Express." tagline · Curated New Arrivals grid · Category navigation · Newsletter subscription</em>
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="./Screenshots/SIGNIN.png" alt="Sign In" width="100%"/>
+        <br/><br/>
+        <em>Sign In — "ENTER STOREFRONT" CTA · Glassmorphism card on ambient dark background · Administrative Access portal</em>
+      </td>
+      <td align="center" width="50%">
+        <img src="./Screenshots/SIGNUP.png" alt="Sign Up" width="100%"/>
+        <br/><br/>
+        <em>Register — "JOIN THE ELITE" badge · "Become part of the SWITCH aesthetic ecosystem" · CREATE ACCOUNT flow</em>
+      </td>
+    </tr>
+  </table>
 </div>
 
 <br/><br/>
@@ -83,10 +90,24 @@
 
 <br/>
 
-#### 🧥 Product Detail Page
+### 🏠 Homepage
 
 <div align="center">
-  <img src="./Screenshots/Full product picture.png" alt="Product Detail Page" width="100%"/>
+  <img src="./Screenshots/HOMEPAGE.png" alt="SWITCH Homepage" width="100%"/>
+  <br/><br/>
+  <em>"ENGINEERED FOR MODERN MOVEMENT" hero banner · New Arrivals & Matching Products grids · 14,551+ products · Newsletter subscription · Full dark-mode storefront</em>
+</div>
+
+<br/><br/>
+
+---
+
+<br/>
+
+### 🧥 Product Detail Page
+
+<div align="center">
+  <img src="./Screenshots/PRODUCT.png" alt="Product Detail Page" width="100%"/>
   <br/><br/>
   <em>Image gallery · Size & colour selector · Quantity control · Customer reviews with verified badge · "You May Also Like" & "Trending Now" sections</em>
 </div>
@@ -97,12 +118,12 @@
 
 <br/>
 
-#### ✨ AI Style Advisor
+### 🛒 Checkout — 3-Step Optimized Flow
 
 <div align="center">
-  <img src="./Screenshots/AI Style Advicer.png" alt="AI Style Advisor" width="100%"/>
+  <img src="./Screenshots/CHECKOUT.png" alt="Checkout" width="100%"/>
   <br/><br/>
-  <em>Upload your photo — AI analyses your unique features and builds a personalised style profile with curated outfit recommendations</em>
+  <em>3-step stepper: Address → Payment → Confirm · Promo code support · Live order summary with product thumbnails · Powered by <code>place_order_v2</code> custom DB function (3× faster than previous implementation)</em>
 </div>
 
 <br/><br/>
@@ -111,20 +132,20 @@
 
 <br/>
 
-#### 👤 User Profile &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 📦 My Orders & Return Tracking
+### 👤 User Profile &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 💰 My Wallet
 
 <div align="center">
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="./Screenshots/User Profile.png" alt="User Profile" width="100%"/>
+        <img src="./Screenshots/USER_PROFILE.png" alt="User Profile" width="100%"/>
         <br/><br/>
-        <em>Orders · Wishlist · Saved Addresses · Payment Cards — all in one clean profile hub</em>
+        <em>GOLD tier badge · Orders / Wishlist / Addresses / Wallet stats · iOS-style pill tab slider (Orders · Profile · Wallet · Addresses · Settings)</em>
       </td>
       <td align="center" width="50%">
-        <img src="./Screenshots/User Side Order View System.png" alt="User Orders" width="100%"/>
+        <img src="./Screenshots/USER WALLET.png" alt="User Wallet" width="100%"/>
         <br/><br/>
-        <em>Full order history with live status stepper · Return-progress tracker (Requested → Approved → Picked Up → Refunded)</em>
+        <em>Available balance · Full transaction history (Payments & Refunds) · Refunds auto-credited from approved returns · Filterable by transaction type</em>
       </td>
     </tr>
   </table>
@@ -143,9 +164,9 @@
 #### 📊 Admin Dashboard — Live KPIs · Sales Chart · Predictive Insights
 
 <div align="center">
-  <img src="./Screenshots/Admin Dashboard.png" alt="Admin Dashboard" width="100%"/>
+  <img src="./Screenshots/ADMIN DASHBOARD.png" alt="Admin Dashboard" width="100%"/>
   <br/><br/>
-  <em>Real-time KPIs (Products · Orders · Revenue · Reviews) · Monthly Sales Overview chart · Category Distribution donut · AI-driven Predictive Insights panel</em>
+  <em>Real-time KPIs (Products +12% · Orders +8% · Revenue ₹1,63,236 +23% · Reviews +15%) · Monthly Sales Overview line chart · Category Distribution donut (Men/Women) · AI Predictive Insights (High Demand · Stock Alerts · Revenue Forecast) · Recent Orders feed · 🔔 9 Unread notifications</em>
 </div>
 
 <br/><br/>
@@ -154,45 +175,20 @@
 
 <br/>
 
-#### 📈 Analytics &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 🗂️ Orders Management
+#### 🗂️ Orders Management &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 📦 AI Smart Inventory
 
 <div align="center">
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="./Screenshots/Admin Side Ai Anylsis.png" alt="Admin Analytics" width="100%"/>
+        <img src="./Screenshots/ADMINSIDE_ORDER_MANAGMENT.png" alt="Admin Orders" width="100%"/>
         <br/><br/>
-        <em>Monthly revenue trends · Avg Order Value · Conversion Rate · Revenue Forecast · Peak Sales Period · Best-Selling Products leaderboard</em>
+        <em>Server-paginated table (Page 1 of 3) · Status counters: Total 53 · Pending 1 · Shipped 1 · Delivered 16 · Search by order/customer · Status filter · Product thumbnails · Est. delivery dates</em>
       </td>
       <td align="center" width="50%">
-        <img src="./Screenshots/Admin Side Order Managment.png" alt="Admin Orders" width="100%"/>
+        <img src="./Screenshots/AI_SMART_ADMIN_INVENTORY.png" alt="AI Smart Inventory" width="100%"/>
         <br/><br/>
-        <em>Server-paginated order table · Search & status filter · Product thumbnails · Customer info · Estimated delivery dates</em>
-      </td>
-    </tr>
-  </table>
-</div>
-
-<br/><br/>
-
----
-
-<br/>
-
-#### ↩️ Return Management &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 🛍️ Product Management
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="50%">
-        <img src="./Screenshots/Admin Side Order Return Managment.png" alt="Admin Returns" width="100%"/>
-        <br/><br/>
-        <em>Full returns workflow — View · Approve · Reject · Refund — with reason tagging (Not as Expected · Defective · Damaged) and status badges</em>
-      </td>
-      <td align="center" width="50%">
-        <img src="./Screenshots/Admin Side Product Managment System.png" alt="Admin Products" width="100%"/>
-        <br/><br/>
-        <em>Real-time inventory · Stock level indicators (In Stock · Medium · Low Stock) · Category filter · Inline Edit & Delete</em>
+        <em>Stock Distribution bar chart by category · Per-product Stock / Status / Demand / Trend signals · High Demand · Medium Demand · Falling / Rising / Stable trend indicators · Stock level filter</em>
       </td>
     </tr>
   </table>
@@ -208,18 +204,31 @@
 
 <br/>
 
+### 🎭 UI/UX & Brand Identity
+
+| Feature | Description |
+|:---|:---|
+| 🌑 **Cinematic Auth UI** | Luxury glassmorphism login & signup — "ENTER STOREFRONT" / "JOIN THE ELITE" — Apple × Prada aesthetic |
+| 💊 **Profile Tab Pill Slider** | iOS segmented control-style animated pill that glides between Orders · Profile · Wallet · Addresses · Settings |
+| ✨ **Glossy Dark Theme** | Ambient lighting effects, layered glass cards, and custom Tailwind animations (`fade-in`, `shimmer`, `pulse-soft`) across the entire storefront |
+| 📱 **Fully Responsive** | Mobile-first design that renders correctly across all screen sizes |
+
+<br/>
+
 ### 🛍️ Storefront — User Side
 
 | Feature | Description |
 |:---|:---|
-| 🏠 **Homepage & Hero** | Full-page hero with "Adapt. Transform. Express." tagline, New Arrivals grid, category banners |
+| 🏠 **Homepage & Hero** | Full-page "ENGINEERED FOR MODERN MOVEMENT" hero · New Arrivals · Matching Products grid · 14,551+ catalogue |
 | 🧥 **Product Detail** | Image gallery, size & colour selector, quantity control, Add to Cart / Buy Now |
 | ⭐ **Customer Reviews** | Star ratings, verified-purchase badge, review submission form |
 | 🔮 **You May Also Like** | Smart related product recommendations on every product page |
 | ✨ **AI Style Advisor** | Upload photo → AI analyses features → personalised style profile with outfit recommendations |
-| 👤 **User Profile Hub** | Manage orders, wishlist, saved addresses, and payment cards in one place |
+| 👤 **User Profile Hub** | GOLD tier badge · manage orders, wishlist, saved addresses, wallet in one place |
+| 💰 **Wallet System** | Available balance · full transaction history · refunds auto-credited from approved returns · usable at checkout |
 | 📦 **Order Tracking** | Live status stepper: Order Placed → Processing → Shipped → Out for Delivery → Delivered |
-| ↩️ **Return System** | Initiate returns with reason tagging; real-time tracker: Requested → Approved → Picked Up → Refunded |
+| ↩️ **Return System** | Initiate returns with reason tagging; real-time tracker (Requested → Approved → Picked Up → Refunded) — updates instantly without page refresh |
+| 🛒 **Optimized Checkout** | 3-step Address → Payment → Confirm flow powered by `place_order_v2` custom DB function — 3× faster than standard implementation |
 | 💌 **Newsletter** | Email subscription for exclusive offers and style updates |
 
 <br/>
@@ -228,17 +237,17 @@
 
 | Feature | Description |
 |:---|:---|
-| 📊 **Dashboard** | Live KPIs — Total Products, Orders, Revenue, Reviews — with growth trend percentages |
-| 📈 **Sales Chart** | Interactive monthly revenue line chart with area fill |
-| 🍩 **Category Distribution** | Donut chart breakdown — Shirts · Pants · Dresses · Jackets · Accessories |
-| 🤖 **Predictive Insights** | AI-driven High Demand alerts, Stock Warnings, and Revenue Forecast cards |
-| 📉 **Analytics Page** | Monthly revenue, Avg Order Value, Conversion Rate, Best-Selling Products leaderboard |
-| 🗂️ **Orders Management** | Server-paginated table with search, status filter, product thumbnails, est. delivery |
-| ↩️ **Return Management** | Full approval workflow — Approve · Reject · Mark Refunded — with reason & status badges |
-| 🛍️ **Product Management** | Real-time inventory, stock level alerts, Add / Edit / Delete with category filtering |
+| 📊 **Real-time Dashboard** | Live KPIs (Products · Orders · Revenue · Reviews) with growth % · `useMemo`-optimized stats |
+| 🔔 **Notification System** | Instant bell notifications for new orders and return requests — no page refresh needed |
+| 📈 **Sales Chart** | Interactive monthly revenue/profit line chart with area fill |
+| 🍩 **Category Distribution** | Donut chart — Men · Women breakdown |
+| 🤖 **Predictive Insights** | AI-driven High Demand alerts · Stock Warnings · Revenue Forecast cards |
+| 📦 **AI Smart Inventory** | Stock Distribution by category · per-product Demand signals (High/Medium/Low) · Trend indicators (Rising/Falling/Stable) |
+| 🗂️ **Orders Management** | Server-paginated table · search & status filter · product thumbnails · est. delivery dates |
+| ↩️ **Return Management** | Full approval workflow — Approve · Reject · Mark Refunded — with reason tagging and real-time user sync |
+| 🛍️ **Product Management** | Real-time inventory · stock level alerts · Add / Edit / Delete with category filtering |
 | 👥 **User Management** | Customer accounts overview |
 | ⭐ **Reviews Moderation** | View and moderate all customer reviews |
-| 📦 **Inventory Tracking** | Stock-level monitoring with low stock and restock alerts |
 
 <br/>
 
@@ -254,19 +263,20 @@
 
 | Layer | Technology | Purpose |
 |:---:|:---|:---|
-| ⚛️ | **React 18 + TypeScript** | Frontend framework with full type safety |
-| ⚡ | **Vite 5** | Lightning-fast build tool & dev server |
-| 🎨 | **Tailwind CSS + tailwindcss-animate** | Utility-first styling & smooth animations |
+| ⚛️ | **React 18 + TypeScript 5** | Frontend framework with full type safety (`any` types eliminated) |
+| ⚡ | **Vite 5** | Lightning-fast build tool with manual chunk splitting (vendor · router · motion · supabase · ui) |
+| 🎨 | **Tailwind CSS + tailwindcss-animate** | Utility-first styling with custom animations (fade-in, shimmer, pulse-soft) |
 | 🧩 | **shadcn/ui + Radix UI** | Accessible, customisable UI primitives |
 | 🔀 | **React Router DOM v6** | Client-side routing |
-| 🔄 | **TanStack React Query v5** | Server state management & data fetching |
+| 🔄 | **TanStack React Query v5** | Server state management, data fetching & cache |
 | 📋 | **React Hook Form + Zod** | Form handling & schema validation |
 | 🎞️ | **Framer Motion** | Page & component animations |
 | 📊 | **Recharts** | Interactive charts & data visualisation |
+| 🖋️ | **Inter (system font)** | Clean, modern typography |
 | 🗄️ | **Supabase (PostgreSQL)** | Database with real-time subscriptions |
 | 🔐 | **Supabase Auth** | JWT-based authentication + Row-Level Security |
 | ☁️ | **Supabase Edge Functions** | Serverless backend business logic |
-| 🖋️ | **Poppins (@fontsource)** | Premium typography |
+| 🔁 | **GitHub Actions + GitLab CI** | Automated build & test pipeline on every push |
 | 🚀 | **Vercel** | Production deployment & global CDN hosting |
 
 </div>
@@ -299,7 +309,7 @@ switch/
 │   └── 📁 data/                # Static seed data & constants
 │
 ├── 📁 supabase/
-│   ├── 📁 migrations/          # SQL database schema migrations
+│   ├── 📁 migrations/          # SQL schema migrations (managed via Git LFS)
 │   └── 📁 functions/           # Serverless Edge Functions
 │
 ├── 📁 api/                     # API route handlers
@@ -307,9 +317,9 @@ switch/
 ├── 📁 Screenshots/             # Project screenshots for README
 │
 ├── 📄 index.html
-├── 📄 vite.config.ts
-├── 📄 tailwind.config.ts
-├── 📄 vercel.json
+├── 📄 vite.config.ts           # Manual chunk splitting configured
+├── 📄 tailwind.config.ts       # Custom animations & design tokens
+├── 📄 vercel.json              # SPA routing config
 └── 📄 package.json
 ```
 
@@ -334,19 +344,20 @@ The project uses **Supabase (PostgreSQL)** with Row-Level Security (RLS) enforce
        │                │   returns    │──────▶  │   products    │
        │                │              │         │               │
        │                └──────────────┘         └───────────────┘
-       │                                                 │
-       ▼                                                 ▼
-┌──────────────┐                                ┌───────────────┐
-│  wishlists   │                                │    reviews    │
-│              │                                │               │
-└──────────────┘                                └───────────────┘
+       │                       │                         │
+       ▼                       ▼                         ▼
+┌──────────────┐        ┌──────────────┐        ┌───────────────┐
+│  wishlists   │        │    wallet    │         │    reviews    │
+│              │        │transactions  │         │               │
+└──────────────┘        └──────────────┘         └───────────────┘
 ```
 
 **Key design decisions:**
-- 🔒 **RLS Policies** — Users can only read/write their own orders, returns, and profile data
+- 🔒 **RLS Policies** — Users can only read/write their own orders, returns, wallet, and profile data
 - 👑 **Admin Role** — Separate admin flag in `profiles` with elevated RLS permissions for full store access
-- ⚡ **Real-time** — Supabase Realtime subscriptions power live order status updates
-- ☁️ **Edge Functions** — Complex business logic (return approvals, stock updates) runs serverlessly
+- ⚡ **Real-time** — Supabase Realtime subscriptions power live order status and return workflow updates
+- 🚀 **`place_order_v2`** — Custom PostgreSQL function that handles the entire order placement in a single atomic DB call (3× faster checkout)
+- ☁️ **Edge Functions** — Complex business logic (return approvals, wallet credits, stock updates) runs serverlessly
 
 <br/>
 
@@ -363,6 +374,7 @@ The project uses **Supabase (PostgreSQL)** with Row-Level Security (RLS) enforce
 - **Node.js** v18 or higher → [Download](https://nodejs.org/)
 - **npm** or **bun** package manager
 - A **[Supabase](https://supabase.com)** project (free tier works perfectly)
+- **Git LFS** installed (required for the migration file) → [Install](https://git-lfs.com/)
 
 <br/>
 
@@ -398,7 +410,9 @@ VITE_SUPABASE_PROJECT_ID=your-project-id
 supabase db push
 
 # Option B — Manual
-# Open consolidated_migration.sql → run it in your Supabase SQL Editor
+# Open supabase/migrations/consolidated_migration.sql
+# Run it in your Supabase SQL Editor
+# Note: this file is stored in Git LFS — ensure git-lfs is installed before cloning
 ```
 
 ### 5 — Start the Development Server
@@ -419,7 +433,7 @@ Open [http://localhost:8080](http://localhost:8080) — you're live! 🎉
 
 ```bash
 npm run dev          # 🔥 Start dev server with hot reload  →  localhost:8080
-npm run build        # 📦 Production build
+npm run build        # 📦 Production build (with manual chunk splitting)
 npm run build:dev    # 🔧 Development mode build
 npm run preview      # 👁️  Preview production build locally
 npm run lint         # ✅ Run ESLint code quality checks
