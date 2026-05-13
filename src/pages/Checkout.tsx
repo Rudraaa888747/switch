@@ -250,159 +250,47 @@ const Checkout = () => {
       const dateOnly = estimatedDelivery.toISOString().split('T')[0];
       const finalPaymentMethod = remainingTotal === 0 ? 'wallet' : `${walletApplied > 0 ? 'wallet+' : ''}${paymentMethod}`;
 
-      const orderPayload = {
-        order_id: newOrderId,
-        user_id: currentUserId,
-        status: 'processing',
-        estimated_delivery: dateOnly,
-        subtotal: totalPrice - couponDiscount,
-        tax,
-        shipping,
-        total: grandTotal,
-        items: items.map((item: CheckoutCartItem) => ({
-          product_id: item.product.id,
-          product_name: item.product.name,
-          product_image: getProductImage(item.product, item.color),
-          quantity: item.quantity,
-          price: item.product.price,
-          total_price: item.product.price * item.quantity,
-          size: item.size,
-          color: item.color,
-        })),
-        customer_name: addressForm.fullName,
-        customer_email: addressForm.email || null,
-        customer_phone: addressForm.phone,
-        shipping_address: addressForm.address,
-        shipping_city: addressForm.city,
-        shipping_state: addressForm.state,
-        shipping_pincode: addressForm.pincode,
-        payment_method: finalPaymentMethod,
-      };
+      const itemsPayload = items.map((item: CheckoutCartItem) => ({
+        product_id: item.product.id,
+        product_name: item.product.name,
+        product_image: getProductImage(item.product, item.color),
+        quantity: item.quantity,
+        price: item.product.price,
+        total_price: item.product.price * item.quantity,
+        size: item.size,
+        color: item.color,
+      }));
 
-      let createdOrderId: string | null = null;
-
-      if (walletApplied > 0) {
-        let rpcSucceeded = false;
-        try {
-          const rpcResponse = await Promise.race([
-            supabase.rpc('place_order_with_wallet', {
-              p_order_id: newOrderId,
-              p_user_id: currentUserId,
-              p_status: 'processing',
-              p_estimated_delivery: dateOnly,
-              p_subtotal: totalPrice - couponDiscount,
-              p_tax: tax,
-              p_shipping: shipping,
-              p_total: grandTotal,
-              p_items: items.map((item: CheckoutCartItem) => ({
-                product_id: item.product.id,
-                product_name: item.product.name,
-                product_image: getProductImage(item.product, item.color),
-                quantity: item.quantity,
-                price: item.product.price,
-                total_price: item.product.price * item.quantity,
-                size: item.size,
-                color: item.color,
-              })),
-              p_customer_name: addressForm.fullName,
-              p_customer_email: addressForm.email || null,
-              p_customer_phone: addressForm.phone,
-              p_shipping_address: addressForm.address,
-              p_shipping_city: addressForm.city,
-              p_shipping_state: addressForm.state,
-              p_shipping_pincode: addressForm.pincode,
-              p_payment_method: finalPaymentMethod,
-              p_wallet_amount: walletApplied,
-            }),
-            new Promise<never>((_, reject) => {
-              window.setTimeout(() => reject(new Error('Supabase wallet RPC timeout')), 15000);
-            }),
-          ]);
-
-          if ('error' in rpcResponse && rpcResponse.error) {
-            throw rpcResponse.error;
-          }
-
-          if ('data' in rpcResponse) {
-            const parsed = typeof rpcResponse.data === 'string' ? JSON.parse(rpcResponse.data) : rpcResponse.data;
-            rpcSucceeded = !!parsed?.success;
-            if (!rpcSucceeded && parsed?.error) {
-              throw new Error(parsed.error);
-            }
-          }
-        } catch {
-          rpcSucceeded = false;
-        }
-
-        if (!rpcSucceeded) {
-          createdOrderId = await createOrderRecord(orderPayload);
-          const { error: walletError } = await withTimeout(
-            supabase.rpc('deduct_wallet_balance', {
-              p_user_id: currentUserId,
-              p_amount: walletApplied,
-              p_reference_id: newOrderId,
-              p_description: `Wallet payment for order #${newOrderId}`,
-            }),
-            'Wallet debit timed out',
-          );
-          if (walletError) throw walletError;
-        }
-      } else {
-        createdOrderId = await createOrderRecord(orderPayload);
-      }
-
-      if (!createdOrderId) {
-        const { data: createdOrder } = await withTimeout(
-          supabase
-            .from('orders')
-            .select('id')
-            .eq('order_id', newOrderId)
-            .maybeSingle(),
-          'Order lookup timed out',
-        );
-        createdOrderId = createdOrder?.id ?? null;
-      }
-
-      if (!createdOrderId) {
-        throw new Error('Order created but ID could not be resolved');
-      }
-
-      const orderItemsPayload = items.map((item: CheckoutCartItem) => ({
-          order_id: createdOrderId,
-          product_id: item.product.id,
-          product_name: item.product.name,
-          product_image: getProductImage(item.product, item.color),
-          quantity: item.quantity,
-          unit_price: item.product.price,
-          line_total_amount: item.product.price * item.quantity,
-          variant: JSON.stringify({ size: item.size, color: item.color }),
-        }));
-
-      const { error: orderItemsError } = await withTimeout(
-        supabase.from('order_items').insert(orderItemsPayload),
-        'Order items save timed out',
+      const { data: rpcResult, error: rpcError } = await withTimeout(
+        supabase.rpc('place_order_v2', {
+          p_order_id: newOrderId,
+          p_user_id: currentUserId,
+          p_status: 'processing',
+          p_estimated_delivery: dateOnly,
+          p_subtotal: totalPrice - couponDiscount,
+          p_tax: tax,
+          p_shipping: shipping,
+          p_total: grandTotal,
+          p_items: itemsPayload,
+          p_customer_name: addressForm.fullName,
+          p_customer_email: addressForm.email || null,
+          p_customer_phone: addressForm.phone,
+          p_shipping_address: addressForm.address,
+          p_shipping_city: addressForm.city,
+          p_shipping_state: addressForm.state,
+          p_shipping_pincode: addressForm.pincode,
+          p_payment_method: finalPaymentMethod,
+          p_wallet_amount: walletApplied,
+          p_coupon_code: appliedCoupon?.code || null,
+        }),
+        'Order placement timed out',
       );
-      if (orderItemsError) {
-        throw orderItemsError;
-      }
 
-      if (appliedCoupon?.code) {
-        const { data: couponRow } = await withTimeout(
-          supabase
-            .from('coupons')
-            .select('current_uses')
-            .eq('code', appliedCoupon.code)
-            .maybeSingle(),
-          'Coupon lookup timed out',
-        );
+      if (rpcError) throw rpcError;
 
-        await withTimeout(
-          supabase
-            .from('coupons')
-            .update({ current_uses: Number(couponRow?.current_uses || 0) + 1 })
-            .eq('code', appliedCoupon.code),
-          'Coupon update timed out',
-        );
+      const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+      if (!parsed?.success) {
+        throw new Error(parsed?.error || 'Failed to place order via server');
       }
 
       await createAdminNotification({

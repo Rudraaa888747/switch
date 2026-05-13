@@ -42,7 +42,7 @@ const AdminDashboard = () => {
   const { unreadCount } = useAdmin();
   const [activeChart, setActiveChart] = useState<'revenue' | 'profit'>('revenue');
 
-  const stats = data ?? {
+  const stats = useMemo(() => data ?? {
     totalProducts: products.length,
     totalOrders: 0,
     totalRevenue: 0,
@@ -52,7 +52,7 @@ const AdminDashboard = () => {
     recentOrders: [],
     monthlyData: [],
     categoryData: [],
-  };
+  }, [data]);
 
   const statCards = useMemo(
     () => [

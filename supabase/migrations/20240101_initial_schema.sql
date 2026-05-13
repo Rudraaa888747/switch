@@ -1,4 +1,4 @@
-supabase/migrations/consolidated_migration.sql-- Clean slate: Drop triggers on auth.users if they exist
+-- Clean slate: Drop triggers on auth.users if they exist
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 
 -- Clean slate: Drop all tables and their dependencies

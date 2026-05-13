@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { Product } from '@/data/products';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,9 +29,11 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   });
   const [synced, setSynced] = useState(false);
 
+  const initialLoadDone = useRef(false);
+
   // Load from Supabase on auth
   useEffect(() => {
-    if (!isAuthenticated || !user || synced) return;
+    if (!isAuthenticated || !user || synced || initialLoadDone.current) return;
     
     const loadServer = async () => {
       try {
@@ -41,21 +43,20 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
           .eq('user_id', user.id);
         
         if (serverItems && serverItems.length > 0) {
-          // We only have product_ids - mark them for resolution
-          const local = items;
           const serverIds = new Set(serverItems.map(si => si.product_id));
-          
-          // Merge: keep local items that also exist on server
-          const merged = local.filter(li => serverIds.has(li.id));
-          // If server has more than local, we can't resolve products without querying
-          // Fallback: keep local as-is since we loaded products from localStorage
-          if (merged.length !== local.length && merged.length > 0) {
-            setItems(merged);
-          }
+          setItems(prev => {
+            const merged = prev.filter(li => serverIds.has(li.id));
+            if (merged.length !== prev.length && merged.length > 0) {
+              return merged;
+            }
+            return prev;
+          });
         }
         setSynced(true);
+        initialLoadDone.current = true;
       } catch {
         setSynced(true);
+        initialLoadDone.current = true;
       }
     };
     
