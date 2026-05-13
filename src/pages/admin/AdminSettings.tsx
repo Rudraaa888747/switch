@@ -71,8 +71,6 @@ const settingsTabs = [
 
 type SettingsTabId = typeof settingsTabs[number]['id'];
 
-const STORAGE_KEY = 'switch_admin_settings';
-
 function loadSettings(): StoreSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -80,7 +78,9 @@ function loadSettings(): StoreSettings {
       const parsed = JSON.parse(raw);
       return { ...defaultSettings, ...parsed };
     }
-  } catch {}
+  } catch (err) {
+    console.warn('Failed to load settings:', err);
+  }
   return { ...defaultSettings };
 }
 
@@ -99,7 +99,9 @@ const AdminSettings = () => {
         if (remote?.value) {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.value));
         }
-      } catch { /* table may not exist */ }
+      } catch (err) {
+        console.warn('Failed to fetch remote settings:', err);
+      }
       const loaded = loadSettings();
       setSettings(loaded);
     })();
@@ -140,7 +142,9 @@ const AdminSettings = () => {
         key: 'store_settings',
         value: JSON.parse(JSON.stringify(settings)),
       }, { onConflict: 'key' });
-    } catch { /* table may not exist */ }
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    }
     toast({
       title: 'Settings saved',
       description: 'Your changes have been saved successfully.',

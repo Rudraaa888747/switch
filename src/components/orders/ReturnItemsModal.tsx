@@ -138,15 +138,15 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
           reason,
           itemCount: returnItems.length,
         },
-      }).catch((nErr) => console.error('[ReturnModal] Admin notification failed:', nErr));
+      }).catch((nErr: unknown) => console.error('[ReturnModal] Admin notification failed:', nErr));
 
       setStep(3);
       toast.success('Return request submitted successfully');
       onSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[ReturnModal] Submission error:', error);
-      const errorMessage = error?.message || 'Failed to submit return request';
-      const errorHint = error?.hint ? ` (${error.hint})` : '';
+      const errorMessage = (error as Error)?.message || 'Failed to submit return request';
+      const errorHint = (error as { hint?: string })?.hint ? ` (${(error as { hint?: string }).hint})` : '';
       toast.error(`${errorMessage}${errorHint}`);
     } finally {
       setIsSubmitting(false);

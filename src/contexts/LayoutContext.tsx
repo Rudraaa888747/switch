@@ -1,11 +1,5 @@
-import { createContext, useContext, useState } from 'react';
-
-interface LayoutContextType {
-  hideFooter: boolean;
-  setHideFooter: (v: boolean) => void;
-}
-
-const LayoutContext = createContext<LayoutContextType>({ hideFooter: false, setHideFooter: () => {} });
+import { useState } from 'react';
+import { LayoutContext } from '@/hooks/use-layout';
 
 export const LayoutProvider = ({ children }: { children: React.ReactNode }) => {
   const [hideFooter, setHideFooter] = useState(false);
@@ -15,5 +9,3 @@ export const LayoutProvider = ({ children }: { children: React.ReactNode }) => {
     </LayoutContext.Provider>
   );
 };
-
-export const useLayout = () => useContext(LayoutContext);

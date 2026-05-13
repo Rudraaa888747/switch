@@ -5,7 +5,7 @@ import Header from './Header';
 import Footer from './Footer';
 import MobileBottomNav from './MobileBottomNav';
 import { ScrollProgress } from '@/components/animations/ScrollProgress';
-import { useLayout } from '@/contexts/LayoutContext';
+import { useLayout } from '@/hooks/use-layout';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 const Layout = () => {

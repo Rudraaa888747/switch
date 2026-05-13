@@ -71,7 +71,8 @@ const AdminReviews = () => {
 
     try {
       return JSON.parse(responseText) as AdminReviewsApiResponse;
-    } catch {
+    } catch (err) {
+      console.warn('Failed to parse response:', err);
       return { error: responseText };
     }
   };
@@ -113,29 +114,25 @@ const AdminReviews = () => {
         );
       }
 
-      // Merge real reviews with fallbacks to ensure dashboard is populated
-      let finalReviews = [...(fetchedReviews || [])];
+      const finalReviews = [...(fetchedReviews || [])];
       
-      // If we have products but few real reviews, inject fallback reviews for each product
       if (fetchedProducts.length > 0) {
         fetchedProducts.forEach(p => {
-          // Only add fallbacks if this product doesn't have many real reviews
           const realReviewCount = finalReviews.filter(r => r.product_id === p.id).length;
           if (realReviewCount < 2) {
             const fallbacks = buildFallbackReviews({ 
               id: p.id, 
               name: p.name,
-              category: 'premium' // simplified for fallback generator
+              category: 'premium'
             }).map(f => ({
               ...f,
               product_id: p.id,
-              is_fallback: true // mark it so we can handle it differently if needed
+              is_fallback: true
             }));
             
-            // Add unique fallbacks (don't duplicate if already present)
             fallbacks.forEach(f => {
               if (!finalReviews.find(r => r.id === f.id)) {
-                finalReviews.push(f as any);
+                finalReviews.push(f as Review);
               }
             });
           }
@@ -233,7 +230,6 @@ const AdminReviews = () => {
   return (
     <AdminLayout>
       <div className="p-6 lg:p-8 space-y-6">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -242,7 +238,6 @@ const AdminReviews = () => {
           <p className="text-muted-foreground">Manage and moderate customer reviews</p>
         </motion.div>
 
-        {/* Stats */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -281,7 +276,6 @@ const AdminReviews = () => {
           ))}
         </motion.div>
 
-        {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -310,7 +304,6 @@ const AdminReviews = () => {
           </select>
         </motion.div>
 
-        {/* Reviews List */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
