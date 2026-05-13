@@ -93,7 +93,7 @@
 ### 🏠 Homepage
 
 <div align="center">
-  <img src="./Screenshots/HOMEPAGE.png" alt="SWITCH Homepage" width="100%"/>
+  <img src="./Screenshots/Homepage.png" alt="SWITCH Homepage" width="100%"/>
   <br/><br/>
   <em>"ENGINEERED FOR MODERN MOVEMENT" hero banner · New Arrivals & Matching Products grids · 14,551+ products · Newsletter subscription · Full dark-mode storefront</em>
 </div>
@@ -138,7 +138,7 @@
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="./Screenshots/USER_PROFILE.png" alt="User Profile" width="100%"/>
+        <img src="./Screenshots/User Profile.png" alt="User Profile" width="100%"/>
         <br/><br/>
         <em>GOLD tier badge · Orders / Wishlist / Addresses / Wallet stats · iOS-style pill tab slider (Orders · Profile · Wallet · Addresses · Settings)</em>
       </td>
@@ -164,7 +164,7 @@
 #### 📊 Admin Dashboard — Live KPIs · Sales Chart · Predictive Insights
 
 <div align="center">
-  <img src="./Screenshots/ADMIN DASHBOARD.png" alt="Admin Dashboard" width="100%"/>
+  <img src="./Screenshots/Admin Dashboard.png" alt="Admin Dashboard" width="100%"/>
   <br/><br/>
   <em>Real-time KPIs (Products +12% · Orders +8% · Revenue ₹1,63,236 +23% · Reviews +15%) · Monthly Sales Overview line chart · Category Distribution donut (Men/Women) · AI Predictive Insights (High Demand · Stock Alerts · Revenue Forecast) · Recent Orders feed · 🔔 9 Unread notifications</em>
 </div>
