@@ -1,17 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Filter, 
-  X, 
-  ChevronDown,
-  Grid3X3,
-  LayoutGrid,
-  SlidersHorizontal
-} from 'lucide-react';
-import Layout from '@/components/layout/Layout';
+import { X, ChevronDown, Grid3X3, LayoutGrid, SlidersHorizontal, Loader2 } from 'lucide-react';
 import ProductCard from '@/components/products/ProductCard';
 import { products } from '@/data/products';
+import { useProducts } from '@/hooks/useProducts';
 
 const Shop = () => {
   const [searchParams] = useSearchParams();
@@ -21,7 +14,7 @@ const Shop = () => {
 
   const [showFilters, setShowFilters] = useState(false);
   const [gridSize, setGridSize] = useState<'small' | 'large'>('small');
-  const [sortBy, setSortBy] = useState('popular');
+  const [sortBy, setSortBy] = useState(filterParam === 'new' || filterParam === 'sale' ? 'newest' : 'popular');
   const [filters, setFilters] = useState({
     category: categoryParam || 'all',
     priceRange: 'all',
@@ -41,9 +34,12 @@ const Shop = () => {
   const colors = ['Black', 'White', 'Navy', 'Grey', 'Blue', 'Pink', 'Olive'];
   const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
   const occasions = ['Casual', 'Formal', 'Party', 'Office', 'Wedding', 'Travel'];
+  
+  const { data: dbProducts = [], isLoading } = useProducts();
+  const allProducts = dbProducts.length > 0 ? dbProducts : products;
 
   const filteredProducts = useMemo(() => {
-    let result = [...products];
+    let result = [...allProducts];
 
     // Search filter
     if (searchQuery) {
@@ -62,7 +58,9 @@ const Shop = () => {
       });
     }
 
-    // Category filter
+    // ── Category isolation ──────────────────────────────────────
+    // Always apply category filter first so every subsequent filter operates
+    // within the correct category context (never leaks across categories).
     if (filters.category !== 'all') {
       result = result.filter(p => p.category === filters.category);
     }
@@ -88,7 +86,7 @@ const Shop = () => {
     // Color filter
     if (filters.colors.length > 0) {
       result = result.filter(p => 
-        p.colors.some(c => filters.colors.includes(c))
+        p.colors.some(c => filters.colors.some(fc => c.toLowerCase().includes(fc.toLowerCase())))
       );
     }
 
@@ -115,7 +113,11 @@ const Shop = () => {
         result.sort((a, b) => b.price - a.price);
         break;
       case 'newest':
-        result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+        result.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return dateB - dateA;
+        });
         break;
       case 'popular':
       default:
@@ -123,7 +125,7 @@ const Shop = () => {
     }
 
     return result;
-  }, [filters, filterParam, searchQuery, sortBy]);
+  }, [allProducts, filters, filterParam, searchQuery, sortBy]);
 
   const toggleColor = (color: string) => {
     setFilters(prev => ({
@@ -144,13 +146,13 @@ const Shop = () => {
   };
 
   const clearFilters = () => {
-    setFilters({
-      category: 'all',
+    setFilters(prev => ({
+      category: prev.category,
       priceRange: 'all',
       colors: [],
       sizes: [],
       occasion: 'all',
-    });
+    }));
   };
 
   const activeFiltersCount = [
@@ -162,7 +164,7 @@ const Shop = () => {
   ].filter(Boolean).length;
 
   return (
-    <Layout>
+    <>
       {/* Page Header */}
       <section className="py-8 md:py-12 border-b border-border">
         <div className="container-custom">
@@ -366,7 +368,12 @@ const Shop = () => {
             </div>
 
             {/* Products Grid */}
-            {filteredProducts.length > 0 ? (
+            {isLoading && dbProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-40 gap-3">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse">Fetching latest arrivals...</p>
+              </div>
+            ) : filteredProducts.length > 0 ? (
               <div className={`grid gap-4 md:gap-6 ${
                 gridSize === 'large' 
                   ? 'grid-cols-2 md:grid-cols-2 lg:grid-cols-3'
@@ -511,7 +518,9 @@ const Shop = () => {
                     Clear All
                   </button>
                   <button
-                    onClick={() => setShowFilters(false)}
+                    onClick={() => {
+                      setShowFilters(false);
+                    }}
                     className="flex-1 btn-primary"
                   >
                     Apply Filters
@@ -522,7 +531,7 @@ const Shop = () => {
           </>
         )}
       </AnimatePresence>
-    </Layout>
+    </>
   );
 };
 

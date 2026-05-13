@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Grid3X3, LayoutGrid, SlidersHorizontal, X, Sparkles } from 'lucide-react';
+import { ChevronDown, Grid3X3, LayoutGrid, SlidersHorizontal, X, Sparkles, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import ProductCard from '@/components/products/ProductCard';
 import { products } from '@/data/products';
+import { useProducts } from '@/hooks/useProducts';
 
 const Women = () => {
   const [gridSize, setGridSize] = useState<'small' | 'large'>('small');
@@ -29,9 +29,11 @@ const Women = () => {
   const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
   const occasions = ['Casual', 'Formal', 'Party', 'Office', 'Wedding', 'Beach'];
 
-  // Filter only women's products
+  const { data: dbProducts = [], isLoading } = useProducts({ category: 'women', limit: 24 });
+  const allWomenProducts = dbProducts.length > 0 ? dbProducts : products.filter(p => p.category === 'women');
+
   const womenProducts = useMemo(() => {
-    let result = products.filter(p => p.category === 'women');
+    let result = [...allWomenProducts];
 
     // Price range filter
     if (filters.priceRange !== 'all') {
@@ -72,7 +74,11 @@ const Women = () => {
         result.sort((a, b) => b.price - a.price);
         break;
       case 'newest':
-        result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+        result.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return dateB - dateA;
+        });
         break;
       case 'popular':
       default:
@@ -80,7 +86,7 @@ const Women = () => {
     }
 
     return result;
-  }, [filters, sortBy]);
+  }, [allWomenProducts, filters, sortBy]);
 
   const toggleColor = (color: string) => {
     setFilters(prev => ({
@@ -117,7 +123,7 @@ const Women = () => {
   ].filter(Boolean).length;
 
   return (
-    <Layout>
+    <>
       {/* Hero Section */}
       <section className="relative h-[60vh] md:h-[70vh] overflow-hidden">
         <img
@@ -136,7 +142,7 @@ const Women = () => {
             className="text-center px-4 max-w-4xl"
           >
             <div className="bg-black/30 backdrop-blur-sm px-8 py-10 md:px-16 md:py-14 rounded-sm">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-foreground/10 backdrop-blur-sm rounded-full mb-6">
                 <Sparkles className="w-4 h-4 text-white" />
                 <span className="text-sm font-medium text-white tracking-wide">AI-ENHANCED FASHION</span>
               </div>
@@ -150,14 +156,14 @@ const Women = () => {
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link
                   to="/style-advisor"
-                  className="inline-flex items-center gap-2 bg-white text-black px-8 py-3 uppercase tracking-widest text-xs font-medium hover:bg-black hover:text-white transition-colors"
+                  className="inline-flex items-center gap-2 bg-foreground text-background px-8 py-3 uppercase tracking-widest text-xs font-medium hover:bg-foreground/85 transition-colors"
                 >
                   <Sparkles size={14} />
                   Try Style Advisor
                 </Link>
                 <Link
                   to="/ai-assistant"
-                  className="inline-flex items-center gap-2 border border-white text-white px-8 py-3 uppercase tracking-widest text-xs font-medium hover:bg-white hover:text-black transition-colors"
+                  className="inline-flex items-center gap-2 border border-white text-white px-8 py-3 uppercase tracking-widest text-xs font-medium hover:bg-foreground/10 transition-colors"
                 >
                   AI Shopping Assistant
                 </Link>
@@ -356,7 +362,12 @@ const Women = () => {
             </div>
 
             {/* Products Grid */}
-            {womenProducts.length > 0 ? (
+            {isLoading && dbProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-40 gap-3">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse tracking-widest text-xs">LOADING WOMEN'S COLLECTION...</p>
+              </div>
+            ) : womenProducts.length > 0 ? (
               <div className={`grid gap-6 md:gap-8 ${
                 gridSize === 'large' 
                   ? 'grid-cols-2 lg:grid-cols-3'
@@ -516,7 +527,7 @@ const Women = () => {
           </motion.div>
         </>
       )}
-    </Layout>
+    </>
   );
 };
 

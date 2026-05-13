@@ -1,40 +1,39 @@
-import { motion } from 'framer-motion';
+import { Suspense } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import Header from './Header';
 import Footer from './Footer';
+import MobileBottomNav from './MobileBottomNav';
 import { ScrollProgress } from '@/components/animations/ScrollProgress';
+import { useLayout } from '@/contexts/LayoutContext';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
-interface LayoutProps {
-  children: React.ReactNode;
-  showFooter?: boolean;
-}
+const Layout = () => {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const { hideFooter } = useLayout();
 
-const Layout = ({ children, showFooter = true }: LayoutProps) => {
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Scroll progress indicator */}
       <ScrollProgress />
-
       <Header />
-
-      <motion.main
-        className="flex-1 pt-16 md:pt-20"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-      >
-        {children}
-      </motion.main>
-
-      {showFooter && (
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        >
-          <Footer />
-        </motion.div>
-      )}
+      <main className="flex-1 pt-safe md:pt-20 mobile-nav-clearance overflow-x-clip">
+        <Suspense fallback={<PageSkeleton />}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+        </Suspense>
+      </main>
+      {!hideFooter && !isAdminRoute && <Footer />}
+      {!isAdminRoute && <MobileBottomNav />}
     </div>
   );
 };

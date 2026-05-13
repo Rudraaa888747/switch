@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle, Clock, History, Package, Truck, Undo2, XCircle } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/data/products';
 import { toast } from '@/hooks/use-toast';
@@ -223,9 +222,11 @@ const MyOrders = () => {
   useEffect(() => {
     if (!userId) return;
 
-    // Real-time subscription for returns
+    console.log('[MyOrders] Setting up real-time subscriptions for user:', userId);
+
+    // Consolidated real-time channel for both orders and returns
     const channel = supabase
-      .channel('public:return_requests')
+      .channel(`user-sync-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -234,13 +235,34 @@ const MyOrders = () => {
           table: 'return_requests',
           filter: `user_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
+          console.log('[MyOrders] Real-time return update:', payload);
+          queryClient.invalidateQueries({ queryKey: ['user-returns', userId] });
+          // Also invalidate orders as returns change order-related UI
+          queryClient.invalidateQueries({ queryKey: ['user-orders', userId] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          console.log('[MyOrders] Real-time order update:', payload);
+          queryClient.invalidateQueries({ queryKey: ['user-orders', userId] });
+          // Also invalidate returns as order updates might affect return status visibility
           queryClient.invalidateQueries({ queryKey: ['user-returns', userId] });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[MyOrders] Sync channel status for ${userId}:`, status);
+      });
 
     return () => {
+      console.log('[MyOrders] Cleaning up sync channel');
       supabase.removeChannel(channel);
     };
   }, [userId, queryClient]);
@@ -295,30 +317,25 @@ const MyOrders = () => {
 
   if (!isAuthReady && !userId) {
     return (
-      <Layout>
         <div className="container-custom py-20 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-pulse" />
           <h1 className="text-2xl font-bold mb-4">Loading your account</h1>
           <p className="text-muted-foreground mb-8">Restoring your session and orders...</p>
         </div>
-      </Layout>
     );
   }
 
   if (!isAuthenticated || !userId) {
     return (
-      <Layout>
         <div className="container-custom py-20 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
           <h1 className="text-2xl font-bold mb-4">Please Login</h1>
           <p className="text-muted-foreground mb-8">You need to be logged in to view your orders</p>
         </div>
-      </Layout>
     );
   }
 
   return (
-    <Layout>
       <div className="container-custom py-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-5xl mx-auto">
           <h1 className="text-3xl font-bold mb-8 uppercase tracking-widest">My Orders</h1>
@@ -521,7 +538,6 @@ const MyOrders = () => {
           )}
         </motion.div>
       </div>
-    </Layout>
   );
 };
 

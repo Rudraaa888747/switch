@@ -1,132 +1,172 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, TrendingUp, Heart } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { products, Product } from '@/data/products';
+import { Sparkles, TrendingUp, Heart, Shirt, Palette } from 'lucide-react';
+import { Product } from '@/data/products';
+import { useProducts } from '@/hooks/useProducts';
 import ProductCard from '@/components/products/ProductCard';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SmartRecommendationsProps {
   currentProductId?: string;
-  type?: 'personalized' | 'trending' | 'similar';
+  type?: 'personalized' | 'trending' | 'similar' | 'complete-look' | 'color-match' | 'new-arrivals' | 'curated';
   limit?: number;
 }
 
 const SmartRecommendations = ({ currentProductId, type = 'personalized', limit = 4 }: SmartRecommendationsProps) => {
-  const [recommendations, setRecommendations] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const { supabaseUser } = useAuth();
+  const { data: allProducts, isLoading: productsLoading } = useProducts();
 
-  useEffect(() => {
-    const fetchRecommendations = async () => {
-      setIsLoading(true);
+  const recommendations = useMemo((): Product[] => {
+    if (!allProducts || allProducts.length === 0) return [];
 
-      try {
-        let recommendedProducts: Product[] = [];
+    const pool = currentProductId
+      ? allProducts.filter(p => p.id !== currentProductId)
+      : allProducts;
 
-        if (type === 'trending') {
-          // Get products with most views/purchases
-          const { data: behaviorData } = await supabase
-            .from('user_behavior')
-            .select('product_id')
-            .in('action_type', ['view', 'purchase', 'cart_add'])
-            .order('created_at', { ascending: false })
-            .limit(100);
+    const current = currentProductId
+      ? allProducts.find(p => p.id === currentProductId)
+      : null;
 
-          if (behaviorData && behaviorData.length > 0) {
-            // Count occurrences
-            const productCounts: Record<string, number> = {};
-            behaviorData.forEach(b => {
-              productCounts[b.product_id] = (productCounts[b.product_id] || 0) + 1;
-            });
+    let results: Product[] = [];
 
-            // Sort by count
-            const sortedIds = Object.entries(productCounts)
-              .sort((a, b) => b[1] - a[1])
-              .map(([id]) => id)
-              .filter(id => id !== currentProductId);
-
-            recommendedProducts = sortedIds
-              .map(id => products.find(p => p.id === id))
-              .filter((p): p is Product => !!p)
-              .slice(0, limit);
-          }
-        } else if (type === 'personalized' && supabaseUser?.id) {
-          // Get user's viewed/purchased products
-          const { data: userBehavior } = await supabase
-            .from('user_behavior')
-            .select('product_id, action_type')
-            .eq('user_id', supabaseUser.id)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-          if (userBehavior && userBehavior.length > 0) {
-            // Find similar products based on category/occasion
-            const viewedProducts = userBehavior
-              .map(b => products.find(p => p.id === b.product_id))
-              .filter((p): p is Product => !!p);
-
-            const categories = [...new Set(viewedProducts.map(p => p.category))];
-            const occasions = [...new Set(viewedProducts.flatMap(p => p.occasion))];
-            const viewedIds = new Set(viewedProducts.map(p => p.id));
-
-            recommendedProducts = products
-              .filter(p => 
-                !viewedIds.has(p.id) && 
-                p.id !== currentProductId &&
-                (categories.includes(p.category) || p.occasion.some(o => occasions.includes(o)))
-              )
-              .slice(0, limit);
-          }
-        } else if (type === 'similar' && currentProductId) {
-          // Get similar products by category/occasion
-          const currentProduct = products.find(p => p.id === currentProductId);
-          if (currentProduct) {
-            recommendedProducts = products
-              .filter(p => 
-                p.id !== currentProductId &&
-                (p.category === currentProduct.category || 
-                 p.occasion.some(o => currentProduct.occasion.includes(o)))
-              )
-              .slice(0, limit);
-          }
-        }
-
-        // Fallback to random products if no recommendations
-        if (recommendedProducts.length === 0) {
-          recommendedProducts = products
-            .filter(p => p.id !== currentProductId)
-            .sort(() => Math.random() - 0.5)
-            .slice(0, limit);
-        }
-
-        setRecommendations(recommendedProducts);
-      } catch (err) {
-        console.error('Error fetching recommendations:', err);
-        // Fallback
-        setRecommendations(
-          products
-            .filter(p => p.id !== currentProductId)
-            .sort(() => Math.random() - 0.5)
-            .slice(0, limit)
-        );
-      } finally {
-        setIsLoading(false);
+    switch (type) {
+      case 'trending': {
+        // Trending: is_trending first, then highest rated
+        const trending = pool.filter(p => p.isTrending);
+        const highestRated = pool.filter(p => !p.isTrending).sort((a, b) => b.rating - a.rating);
+        results = [...trending, ...highestRated].slice(0, limit);
+        break;
       }
-    };
 
-    fetchRecommendations();
-  }, [currentProductId, type, limit, supabaseUser?.id]);
+      case 'personalized': {
+        // Personalized: same category + occasion matching
+        if (current) {
+          const sameCategory = pool.filter(p => p.category === current.category);
+          const sameOccasion = pool.filter(p => p.occasion.some(o => current.occasion.includes(o)));
+          const scored = [...new Map(
+            [...sameCategory, ...sameOccasion].map(p => [p.id, p])
+          ).values()].sort((a, b) => {
+            let scoreA = 0, scoreB = 0;
+            if (a.category === current.category) scoreA += 3;
+            if (b.category === current.category) scoreB += 3;
+            if (a.occasion.some(o => current.occasion.includes(o))) scoreA += 2;
+            if (b.occasion.some(o => current.occasion.includes(o))) scoreB += 2;
+            return scoreB - scoreA;
+          });
+          results = scored.slice(0, limit);
+        } else {
+          // Fallback: highest rated
+          results = [...pool].sort((a, b) => b.rating - a.rating).slice(0, limit);
+        }
+        break;
+      }
+
+      case 'similar': {
+        if (!current) break;
+        const currentColors = new Set((current.colors || []).map((color) => color.toLowerCase()));
+        const currentTags = new Set((current.tags || []).map((tag) => tag.toLowerCase()));
+        results = [...pool]
+          .map((product) => {
+            let score = 0;
+            if (product.subcategory === current.subcategory) score += 5;
+            if (product.category === current.category) score += 3;
+            if (product.colors?.some((color) => currentColors.has(color.toLowerCase()))) score += 3;
+            if (product.tags?.some((tag) => currentTags.has(tag.toLowerCase()))) score += 2;
+            if (product.isTrending) score += 1;
+            return { product, score };
+          })
+          .sort((a, b) => b.score - a.score || b.product.rating - a.product.rating)
+          .map((entry) => entry.product)
+          .slice(0, limit);
+        break;
+      }
+
+      case 'complete-look': {
+        // Complete The Look: different categories that pair together
+        // e.g., shirt + pants, top + skirt, dress + accessories
+        if (!current) break;
+        const pairingCategories: Record<string, string[]> = {
+          shirts: ['pants', 'jeans', 'trousers', 'chinos'],
+          tops: ['jeans', 'skirts', 'pants', 'leggings'],
+          dresses: ['jackets', 'accessories', 'jewelry'],
+          hoodies: ['jeans', 'joggers', 'shorts'],
+          sneakers: ['jeans', 'shorts', 'pants'],
+          watches: ['shirts', 'formal'],
+          bags: ['dresses', 'tops', 'shirts'],
+        };
+        const pairWith = pairingCategories[current.subcategory] || [];
+        results = pool
+          .filter(p => pairWith.some(cat => p.subcategory === cat || p.category === cat))
+          .slice(0, limit);
+        break;
+      }
+
+      case 'color-match': {
+        // Color match: same color across different categories
+        if (!current || !current.colors?.length) break;
+        const currentColors = current.colors.map(c => c.toLowerCase());
+        results = pool
+          .filter(p => p.colors?.some(c => currentColors.includes(c.toLowerCase())))
+          .filter(p => p.category !== current.category || p.subcategory !== current.subcategory)
+          .slice(0, limit);
+        break;
+      }
+
+      case 'new-arrivals': {
+        results = pool
+          .filter(p => p.isNew || p.collection === 'new-arrivals')
+          .sort((a, b) => (a.featured ? -1 : 1))
+          .slice(0, limit);
+        break;
+      }
+
+      case 'curated': {
+        // Curated luxury aesthetic: hoodies, oversized fits, dark neutrals, premium basics
+        const luxuryTags = ['hoodie', 'oversized', 'premium', 'luxury', 'essential', 'minimal'];
+        const darkNeutrals = ['Black', 'Navy', 'Grey', 'Charcoal', 'Dark', 'Olive'];
+        const luxurySubcategories = ['hoodies', 'jackets', 'shirts', 't-shirts', 'sweatshirts'];
+        const scored = pool.map(p => {
+          let score = 0;
+          const name = p.name.toLowerCase();
+          const tags = (p.tags || []).map(t => t.toLowerCase());
+          const allText = [name, p.subcategory.toLowerCase(), p.fabric.toLowerCase(), ...tags].join(' ');
+          if (luxuryTags.some(t => allText.includes(t))) score += 3;
+          if (luxurySubcategories.includes(p.subcategory)) score += 2;
+          if (p.colors.some(c => darkNeutrals.some(d => c.toLowerCase().includes(d.toLowerCase())))) score += 2;
+          if (p.rating >= 4) score += 1;
+          if (p.isTrending) score += 1;
+          if (p.featured) score += 1;
+          return { product: p, score };
+        });
+        results = scored.sort((a, b) => b.score - a.score).map(s => s.product).slice(0, limit);
+        break;
+      }
+
+      default:
+        results = [];
+    }
+
+    // Final fallback: random products
+    if (results.length === 0) {
+      results = [...pool].sort(() => Math.random() - 0.5).slice(0, limit);
+    }
+
+    return results;
+  }, [allProducts, currentProductId, type, limit]);
 
   const config = {
     personalized: { icon: Heart, title: 'Recommended for You', subtitle: 'Based on your preferences' },
     trending: { icon: TrendingUp, title: 'Trending Now', subtitle: 'Popular picks from our community' },
-    similar: { icon: Sparkles, title: 'You May Also Like', subtitle: 'Similar styles you might love' },
+    similar: { icon: Sparkles, title: 'Matching Products', subtitle: 'Related SWITCH pieces in a similar mood and palette' },
+    'complete-look': { icon: Shirt, title: 'Complete The Look', subtitle: 'Perfect pairings to style your outfit' },
+    'color-match': { icon: Palette, title: 'Colour Match', subtitle: 'Same colour, different styles' },
+    'new-arrivals': { icon: Sparkles, title: 'New Arrivals', subtitle: 'Fresh drops for your wardrobe' },
+    curated: { icon: Sparkles, title: 'Matching Products', subtitle: 'Hand-selected SWITCH essentials with the same premium energy' },
   }[type];
 
   const Icon = config.icon;
 
-  if (isLoading) {
+  if (productsLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
@@ -136,7 +176,7 @@ const SmartRecommendations = ({ currentProductId, type = 'personalized', limit =
             <div className="h-3 bg-muted rounded w-48" />
           </div>
         </div>
-        <div className="grid-product">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="space-y-3">
               <div className="aspect-product bg-muted rounded-lg animate-pulse" />
@@ -167,9 +207,11 @@ const SmartRecommendations = ({ currentProductId, type = 'personalized', limit =
         </div>
       </div>
 
-      <div className="grid-product">
+      <div className="scrollbar-hide -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:gap-6 md:px-0">
         {recommendations.map((product, index) => (
-          <ProductCard key={product.id} product={product} index={index} />
+          <div key={product.id} className="min-w-[16.25rem] snap-start md:min-w-0">
+            <ProductCard product={product} index={index} />
+          </div>
         ))}
       </div>
     </motion.section>

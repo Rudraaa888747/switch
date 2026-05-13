@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { addDays, format } from 'date-fns';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
 import { Box, CheckCircle, Clock, CreditCard, Eye, Loader2, Search, Undo2, XSquare } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { ProductImageViewer } from '@/components/admin/ProductImageViewer';
@@ -19,9 +20,30 @@ import { normalizeOrders } from '@/lib/orders';
 import { getReturnReasonBadgeClass, getReturnReasonLabel, RETURN_REASON_OPTIONS } from '@/lib/returnReasons';
 import { getProductImage, normalizeImageUrl } from '@/lib/utils';
 import { getAdminApiHeaders } from '@/lib/adminApi';
+import { createAdminNotification } from '@/lib/adminNotifications';
 import { toast } from 'sonner';
 
 const DEFAULT_PRODUCT_IMAGE = '/placeholder.svg';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
+};
+
+const rowVariants = {
+  hidden: { opacity: 0, x: -8 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+};
+
+const modalContentVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
 
 type AdminReturnRow = Record<string, unknown> & {
   id?: string;
@@ -126,6 +148,34 @@ const updateReturnViaRest = async (payload: UpdateReturnPayload) => {
 
   if (!returnRes.data || returnRes.data.length === 0) {
     throw new Error('Return request not found or not updated');
+  }
+
+  if (payload.status) {
+    await createAdminNotification({
+      title: 'Return request updated',
+      message: `Return ${payload.id.slice(0, 8)} moved to ${payload.status.replaceAll('_', ' ')}.`,
+      type: payload.status === 'rejected' ? 'warning' : 'info',
+      eventType: 'return_request',
+      link: '/admin/returns',
+      metadata: {
+        returnId: payload.id,
+        status: payload.status,
+      },
+    }).catch(() => {});
+  }
+
+  if (payload.status === 'refunded' || (payload.refund_amount !== undefined && payload.refund_amount > 0)) {
+    await createAdminNotification({
+      title: 'Refund processed',
+      message: `Refund updated for return ${payload.id.slice(0, 8)}.`,
+      type: 'success',
+      eventType: 'refund',
+      link: '/admin/returns',
+      metadata: {
+        returnId: payload.id,
+        refundAmount: Number(payload.refund_amount || 0),
+      },
+    }).catch(() => {});
   }
 };
 
@@ -366,40 +416,49 @@ const AdminReturns = () => {
     <AdminLayout>
       <TooltipProvider>
         <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
-          <div>
+          <motion.div
+            initial={{ opacity: 0, y: -15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+          >
             <h1 className="text-3xl font-bold tracking-tight uppercase">Return Management</h1>
             <p className="text-sm text-muted-foreground mt-1">Review and process customer refund requests with precision.</p>
-          </div>
+          </motion.div>
 
-          <Card className="border-none shadow-2xl shadow-black/5 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="pb-6 border-b border-border/40 space-y-4">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-11 bg-muted/40 border-border/40" placeholder="Search order number, customer, or comment..." />
-              </div>
-              <div className="flex flex-col lg:flex-row gap-3">
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {['all', 'requested', 'approved', 'picked_up', 'refunded', 'rejected'].map((status) => (
-                    <Button key={status} variant={statusFilter === status ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(status)} className="rounded-full px-4 text-xs uppercase font-bold">
-                      {status === 'all' ? 'All Status' : status.replace('_', ' ')}
-                    </Button>
-                  ))}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 }}
+          >
+            <Card className="border-none shadow-2xl shadow-black/5 bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-6 border-b border-border/40 space-y-4">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-11 bg-muted/40 border-border/40" placeholder="Search order number, customer, or comment..." />
                 </div>
-                <Select value={reasonFilter} onValueChange={setReasonFilter}>
-                  <SelectTrigger className="w-full lg:w-72">
-                    <SelectValue placeholder="Filter by reason" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Reasons</SelectItem>
-                    {RETURN_REASON_OPTIONS.map((reason) => (
-                      <SelectItem key={reason.value} value={reason.value}>
-                        {reason.label}
-                      </SelectItem>
+                <div className="flex flex-col lg:flex-row gap-3">
+                  <div className="flex items-center gap-2 overflow-x-auto">
+                    {['all', 'requested', 'approved', 'picked_up', 'refunded', 'rejected'].map((status) => (
+                      <Button key={status} variant={statusFilter === status ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(status)} className="rounded-full px-4 text-xs uppercase font-bold">
+                        {status === 'all' ? 'All Status' : status.replace('_', ' ')}
+                      </Button>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
+                  </div>
+                  <Select value={reasonFilter} onValueChange={setReasonFilter}>
+                    <SelectTrigger className="w-full lg:w-72">
+                      <SelectValue placeholder="Filter by reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Reasons</SelectItem>
+                      {RETURN_REASON_OPTIONS.map((reason) => (
+                        <SelectItem key={reason.value} value={reason.value}>
+                          {reason.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
             <CardContent className="p-0">
               {isLoading ? (
                 <div className="h-80 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary opacity-30" /></div>
@@ -420,9 +479,18 @@ const AdminReturns = () => {
                         <th className="px-2 py-2 text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/30">
+                    <motion.tbody
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                      className="divide-y divide-border/30"
+                    >
                       {filteredReturns.map((ret) => (
-                        <tr key={String(ret.id)} className="hover:bg-muted/20">
+                        <motion.tr
+                          key={String(ret.id)}
+                          variants={rowVariants}
+                          className="border-b transition-colors hover:bg-muted/50"
+                        >
                           <td className="px-2 py-2"><p className="font-bold text-xs whitespace-nowrap">#{String(ret.orders?.order_id || ret.id || '').slice(0, 14)}</p><p className="text-[10px] text-muted-foreground whitespace-nowrap">{ret.created_at ? format(new Date(String(ret.created_at)), 'dd MMM yyyy') : 'Unknown'}</p></td>
                           <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">{String(ret.profiles?.display_name || 'Anonymous')}</td>
                           <td className="px-2 py-2">
@@ -467,20 +535,26 @@ const AdminReturns = () => {
                               {ret.status === 'rejected' || ret.status === 'refunded' ? <div className="text-[9px] font-black text-muted-foreground uppercase bg-muted/40 px-2 py-1 rounded border border-border/40 flex items-center gap-1"><Clock size={10} />Processed</div> : null}
                             </div>
                           </td>
-                        </tr>
+                        </motion.tr>
                       ))}
-                    </tbody>
+                    </motion.tbody>
                   </table>
                 </div>
               )}
             </CardContent>
           </Card>
+          </motion.div>
         </div>
 
         <Dialog open={!!selectedReturn} onOpenChange={(open) => (!open ? setSelectedReturn(null) : null)}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             {selectedReturn ? (
-              <div className="space-y-4">
+              <motion.div
+                variants={modalContentVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-4"
+              >
                 <DialogHeader><DialogTitle className="uppercase">Return Request Details</DialogTitle></DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Order</p><p className="font-bold">#{String(selectedReturn.orders?.order_id || selectedReturn.id || '').slice(0, 16)}</p><p className="text-xs text-muted-foreground mt-2">Customer</p><p>{String(selectedReturn.profiles?.display_name || 'Anonymous')}</p></CardContent></Card>
@@ -517,7 +591,7 @@ const AdminReturns = () => {
                   {selectedReturn.status === 'approved' ? <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(selectedReturn, 'picked_up')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'picked_up' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Picked Up</Button> : null}
                   {selectedReturn.status === 'picked_up' ? <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(selectedReturn, 'refunded')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'refunded' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Refunded</Button> : null}
                 </div>
-              </div>
+              </motion.div>
             ) : null}
           </DialogContent>
         </Dialog>

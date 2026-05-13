@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -10,10 +10,10 @@ import {
   Loader2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import ProductCard from '@/components/products/ProductCard';
-import { products, formatPrice, Product } from '@/data/products';
+import { formatPrice, Product } from '@/data/products';
 import { useOutfitMatching } from '@/hooks/useOutfitMatching';
+import { useProducts } from '@/hooks/useProducts';
 import { getProductImage } from '@/lib/utils';
 
 // Color harmony rules for visualization
@@ -36,18 +36,24 @@ const OutfitMatching = () => {
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'men' | 'women'>('all');
   const [matchingProducts, setMatchingProducts] = useState<Product[]>([]);
   const { getAIMatches, isMatching } = useOutfitMatching();
+  const { data: dbProducts = [] } = useProducts();
+  const fetchRef = useRef(0);
 
   const displayProducts = useMemo(() => {
-    if (selectedCategory === 'all') return products;
-    return products.filter(p => p.category === selectedCategory);
-  }, [selectedCategory]);
+    if (selectedCategory === 'all') return dbProducts;
+    return dbProducts.filter(p => p.category === selectedCategory);
+  }, [dbProducts, selectedCategory]);
 
-  // Fetch AI matches when a product is selected
+  // Fetch AI matches when a product is selected (with race condition guard)
   useEffect(() => {
+    const token = ++fetchRef.current;
+    
     const fetchMatches = async () => {
       if (selectedProduct) {
         const matches = await getAIMatches(selectedProduct);
-        setMatchingProducts(matches);
+        if (token === fetchRef.current) {
+          setMatchingProducts(matches);
+        }
       } else {
         setMatchingProducts([]);
       }
@@ -83,7 +89,7 @@ const OutfitMatching = () => {
   };
 
   return (
-    <Layout>
+    <>
       {/* Hero Section */}
       <section className="py-12 md:py-16 border-b border-border bg-muted/30">
         <div className="container-custom">
@@ -296,7 +302,7 @@ const OutfitMatching = () => {
           </div>
         </section>
       </div>
-    </Layout>
+    </>
   );
 };
 

@@ -9,21 +9,13 @@ export interface AnalysisResult {
   recommendations: string[];
 }
 
-const SYSTEM_PROMPT = `You are an expert fashion and style advisor. Analyze the provided image of a person and provide detailed style recommendations.
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "skinTone": "string describing skin tone",
-  "bodyStructure": "string describing body type",
-  "styleCategory": "string for recommended style",
-  "colorPalette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-  "recommendations": ["tip1", "tip2", "tip3", "tip4"]
-}`;
-
 export const useStyleAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const analyzeImage = async (imageBase64: string): Promise<AnalysisResult | null> => {
+  const analyzeImage = async (
+    imageBase64: string,
+    options?: { imageUrl?: string; userId?: string }
+  ): Promise<AnalysisResult | null> => {
     setIsAnalyzing(true);
 
     try {
@@ -35,7 +27,11 @@ export const useStyleAnalysis = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ imageBase64 }),
+          body: JSON.stringify({
+            imageBase64,
+            imageUrl: options?.imageUrl || null,
+            userId: options?.userId || null,
+          }),
         }
       );
 
@@ -44,7 +40,7 @@ export const useStyleAnalysis = () => {
       }
 
       const result = await response.json();
-      
+
       if (result.error) {
         throw new Error(result.error);
       }

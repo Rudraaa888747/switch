@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Product } from '@/data/products';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CartItem {
   product: Product;
@@ -17,29 +19,104 @@ interface CartContextType {
   totalItems: number;
   totalPrice: number;
   isInCart: (productId: string) => boolean;
+  isDrawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('cart');
-        return stored ? JSON.parse(stored) : [];
-      } catch {
-        localStorage.removeItem('cart');
-        return [];
-      }
-    }
-    return [];
-  });
+const LOCAL_KEY = 'cart';
 
+const loadLocal = (): CartItem[] => {
+  try {
+    const stored = localStorage.getItem(LOCAL_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    localStorage.removeItem(LOCAL_KEY);
+    return [];
+  }
+};
+
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthenticated, session } = useAuth();
+  const [items, setItems] = useState<CartItem[]>(loadLocal);
+  const [synced, setSynced] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Load from Supabase on auth
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(items));
+    if (!isAuthenticated || !user || synced) return;
+    
+    const loadServerCart = async () => {
+      try {
+        const { data: serverItems } = await supabase
+          .from('cart_items')
+          .select('*')
+          .eq('user_id', user.id);
+        
+        if (serverItems && serverItems.length > 0) {
+          // Merge server items with local items — prefer local (has full Product data)
+          const local = loadLocal();
+          // Start with local items
+          const merged = [...local];
+          // Add server-only items that aren't already in local
+          for (const si of serverItems) {
+            if (!merged.find(m => m.product.id === si.product_id && m.size === si.size && m.color === si.color)) {
+              merged.push({
+                product: { id: si.product_id } as Product,
+                quantity: si.quantity,
+                size: si.size,
+                color: si.color,
+              });
+            }
+          }
+          setItems(merged);
+        }
+        setSynced(true);
+      } catch {
+        // Table may not exist yet, use local
+        setSynced(true);
+      }
+    };
+    
+    loadServerCart();
+  }, [isAuthenticated, user, synced]);
+
+  // Save to localStorage on change
+  useEffect(() => {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addToCart = (product: Product, size: string, color: string, quantity = 1) => {
+  // Sync to Supabase when items change and user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated || !user || !synced) return;
+    
+    const syncToServer = async () => {
+      try {
+        // Delete all existing cart items for this user
+        await supabase.from('cart_items').delete().eq('user_id', user.id);
+        
+        // Insert current items
+        if (items.length > 0) {
+          const rows = items.map(item => ({
+            user_id: user.id,
+            product_id: item.product.id,
+            size: item.size,
+            color: item.color,
+            quantity: item.quantity,
+          }));
+          await supabase.from('cart_items').upsert(rows, { onConflict: 'user_id,product_id,size,color' });
+        }
+      } catch {
+        // Table may not exist yet - silently fall back to localStorage
+      }
+    };
+    
+    syncToServer();
+  }, [items, isAuthenticated, user, session, synced]);
+
+  const addToCart = useCallback((product: Product, size: string, color: string, quantity = 1) => {
     setItems(prev => {
       const existingIndex = prev.findIndex(
         item => item.product.id === product.id && item.size === size && item.color === color
@@ -53,17 +130,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return [...prev, { product, quantity, size, color }];
     });
-  };
+    setIsDrawerOpen(true);
+  }, []);
 
-  const removeFromCart = (productId: string, size: string, color: string) => {
+  const removeFromCart = useCallback((productId: string, size: string, color: string) => {
     setItems(prev =>
       prev.filter(
         item => !(item.product.id === productId && item.size === size && item.color === color)
       )
     );
-  };
+  }, []);
 
-  const updateQuantity = (productId: string, size: string, color: string, quantity: number) => {
+  const updateQuantity = useCallback((productId: string, size: string, color: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId, size, color);
       return;
@@ -76,22 +154,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : item
       )
     );
-  };
+  }, [removeFromCart]);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setItems([]);
-  };
+  }, []);
+
+  const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
+  const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
-  const totalPrice = items.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0
-  );
-
-  const isInCart = (productId: string) => {
+  const isInCart = useCallback((productId: string) => {
     return items.some(item => item.product.id === productId);
-  };
+  }, [items]);
 
   return (
     <CartContext.Provider
@@ -104,6 +181,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalItems,
         totalPrice,
         isInCart,
+        isDrawerOpen,
+        openDrawer,
+        closeDrawer,
       }}
     >
       {children}

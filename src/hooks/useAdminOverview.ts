@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { countDistinctOrders, getOrderRevenue, groupOrders, normalizeOrders, OrderGroup } from '@/lib/orders';
-import { products } from '@/data/products';
+import { DbProduct, mapDbProductToProduct } from './useProducts';
 
 interface AdminOverviewData {
   totalProducts: number;
@@ -18,9 +18,10 @@ interface AdminOverviewData {
 const OVERVIEW_ORDER_COLUMNS = 'id, order_id, customer_name, status, total, subtotal, created_at';
 
 export const fetchAdminOverview = async (): Promise<AdminOverviewData> => {
-  const [{ data: orders, error: ordersError }, { count: reviewsCount, error: reviewsError }] = await Promise.all([
+  const [{ data: orders, error: ordersError }, { count: reviewsCount, error: reviewsError }, { data: rawProducts, count: productCount, error: productError }] = await Promise.all([
     supabase.from('orders').select(OVERVIEW_ORDER_COLUMNS).order('created_at', { ascending: false }),
     supabase.from('reviews').select('id', { count: 'exact', head: true }),
+    supabase.from('products').select('*', { count: 'exact' }),
   ]);
 
   if (ordersError) {
@@ -30,6 +31,19 @@ export const fetchAdminOverview = async (): Promise<AdminOverviewData> => {
   if (reviewsError) {
     throw reviewsError;
   }
+
+  if (productError) {
+    throw productError;
+  }
+
+  const liveProducts = ((rawProducts || []) as DbProduct[]).map(mapDbProductToProduct);
+  const lowStockCount = liveProducts.filter((product) => {
+    const stock = product.variants.reduce((sum, variant) => {
+      if (typeof variant.stock === 'number') return sum + variant.stock;
+      return sum;
+    }, 0);
+    return stock > 0 && stock <= 10;
+  }).length;
 
   interface RawOrderRecord {
     id: string;
@@ -104,8 +118,7 @@ export const fetchAdminOverview = async (): Promise<AdminOverviewData> => {
   mergedOrders.forEach(order => {
     if (order.items && Array.isArray(order.items)) {
       order.items.forEach((item: { product_id?: string }) => {
-        // Try to find category from product data
-        const product = products.find(p => p.id === item.product_id);
+        const product = liveProducts.find(p => p.id === item.product_id);
         const category = product?.category || 'General';
         categoryMap[category] = (categoryMap[category] || 0) + 1;
       });
@@ -118,12 +131,12 @@ export const fetchAdminOverview = async (): Promise<AdminOverviewData> => {
   }));
 
   return {
-    totalProducts: products.length,
+    totalProducts: productCount || 0,
     totalOrders: countDistinctOrders(groupedOrders),
     totalRevenue,
     totalProfit,
     totalReviews: reviewsCount || 0,
-    lowStockCount: 3,
+    lowStockCount,
     recentOrders: groupedOrders.slice(0, 5),
     monthlyData,
     categoryData: categoryData.length > 0 ? categoryData : [{ name: 'Lifestyle', value: 400 }, { name: 'Essentials', value: 300 }]

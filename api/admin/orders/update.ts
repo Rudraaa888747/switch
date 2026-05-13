@@ -18,6 +18,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'orderId and status are required' });
     }
 
+    const { data: existingOrder } = await supabaseAdmin
+      .from('orders')
+      .select('id, order_id, status')
+      .or(`id.eq.${orderId},order_id.eq.${orderId}`)
+      .limit(1)
+      .maybeSingle<{ id: string; order_id: string | null; status: string | null }>();
+
+    const previousStatus = String(existingOrder?.status || '').toLowerCase();
+    const nextStatus = String(status).toLowerCase();
     const updateData: Record<string, unknown> = { status };
 
     if (schemaVersion === 'modern') {
@@ -48,6 +57,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!data || data.length === 0) {
       return res.status(404).json({ error: 'Order not found or not updated' });
+    }
+
+    const isDispatchTransition =
+      previousStatus !== nextStatus &&
+      ['shipped', 'dispatched', 'out_for_delivery', 'delivered'].includes(nextStatus);
+
+    if (isDispatchTransition) {
+      const updatedOrder = data[0] as { id?: string; order_id?: string };
+      await supabaseAdmin
+        .from('admin_notifications')
+        .insert({
+          title: 'Order status updated',
+          message: `Order ${updatedOrder.order_id || orderId} moved to ${nextStatus.replaceAll('_', ' ')}.`,
+          type: nextStatus === 'delivered' ? 'success' : 'info',
+          event_type: 'order_dispatched',
+          link: '/admin/orders',
+          metadata: {
+            orderId: updatedOrder.order_id || orderId,
+            status: nextStatus,
+            previousStatus,
+          },
+        })
+        .then(() => null)
+        .catch(() => null);
     }
 
     return res.status(200).json({ data });

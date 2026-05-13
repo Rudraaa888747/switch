@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, ArrowRight, AlertCircle } from 'lucide-react';
+import { Shield, ArrowRight, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useAdmin } from '@/contexts/AdminContext';
 
 const AdminLogin = () => {
@@ -19,11 +19,15 @@ const AdminLogin = () => {
     e.preventDefault();
     setError('');
 
-    const result = await adminLogin(username, password);
-    if (result.success) {
-      navigate('/admin/dashboard');
-    } else {
-      setError(result.error || 'Invalid username or password');
+    try {
+      const result = await adminLogin(username, password);
+      if (result.success) {
+        navigate('/admin/dashboard');
+      } else {
+        setError(result.error || 'Invalid username or password');
+      }
+    } catch {
+      setError('Connection error. Please try again.');
     }
   };
 
@@ -34,6 +38,26 @@ const AdminLogin = () => {
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl mix-blend-multiply transition-all duration-1000"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/5 blur-3xl mix-blend-multiply transition-all duration-1000"></div>
       </div>
+
+      {/* Return to Store Button */}
+      <motion.div 
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="absolute top-8 left-8 z-20"
+      >
+        <Link 
+          to="/" 
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-all group"
+        >
+          <motion.div
+            whileHover={{ x: -4 }}
+            className="flex items-center gap-2"
+          >
+            <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            <span className="uppercase tracking-[0.2em] text-[10px]">Return to Store</span>
+          </motion.div>
+        </Link>
+      </motion.div>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

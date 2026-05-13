@@ -41,7 +41,7 @@ const StarRating = ({ rating, onRatingChange, readonly = false, size = 'md' }: S
               className={`${sizeClasses[size]} transition-all duration-200 ${
                 isFilled 
                   ? 'fill-primary text-primary' 
-                  : 'text-muted-foreground/40'
+                  : 'text-muted-foreground/70 dark:text-muted-foreground/40'
               }`}
             />
           </motion.button>

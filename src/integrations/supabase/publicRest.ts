@@ -11,6 +11,7 @@ const buildRestUrl = (path: string, searchParams?: URLSearchParams) => {
 const getRestHeaders = (extraHeaders?: HeadersInit) => ({
   apikey: SUPABASE_PUBLISHABLE_KEY,
   Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+  Accept: 'application/json',
   ...extraHeaders,
 });
 
@@ -57,6 +58,10 @@ export const supabaseRestRequest = async <T>(
     ...getRestHeaders(options?.headers),
     ...(options?.authToken ? { Authorization: `Bearer ${options.authToken}` } : {}),
   };
+
+  if ((options?.method === 'POST' || options?.method === 'PATCH') && !normalizedHeaders['Content-Type']) {
+    normalizedHeaders['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(buildRestUrl(path, options?.searchParams), {
     method: options?.method ?? 'GET',

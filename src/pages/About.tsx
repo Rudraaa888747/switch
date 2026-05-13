@@ -1,11 +1,9 @@
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 
 const About = () => {
   return (
-    <Layout>
       <div className="bg-background pt-24 pb-16 md:pt-32 md:pb-24">
         {/* Header Section */}
         <section className="container-custom mx-auto px-4 sm:px-6 lg:px-8 mb-20 text-center">
@@ -106,7 +104,6 @@ const About = () => {
           </motion.div>
         </section>
       </div>
-    </Layout>
   );
 };
 

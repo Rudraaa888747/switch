@@ -1,16 +1,17 @@
 import { useState, useMemo, useCallback } from 'react';
-import { products, Product } from '@/data/products';
+import { Product } from '@/data/products';
 
-export const useSearch = () => {
+export const useSearch = (productList: Product[] = []) => {
   const [query, setQuery] = useState('');
 
-  const searchProducts = useCallback((searchQuery: string): Product[] => {
-    if (!searchQuery.trim()) return [];
+  const searchProducts = useCallback((searchQuery: string, list?: Product[]): Product[] => {
+    const pool = list || productList;
+    if (!searchQuery.trim() || pool.length === 0) return [];
     
     const normalizedQuery = searchQuery.toLowerCase().trim();
     const queryWords = normalizedQuery.split(/\s+/);
 
-    return products
+    return pool
       .map(product => {
         let score = 0;
         const searchableText = [
@@ -21,11 +22,17 @@ export const useSearch = () => {
           ...product.colors,
           ...product.occasion,
           product.fabric,
+          ...(product.tags || []),
         ].join(' ').toLowerCase();
 
         // Exact name match gets highest score
         if (product.name.toLowerCase().includes(normalizedQuery)) {
           score += 10;
+        }
+
+        // Tag match
+        if (product.tags?.some(t => normalizedQuery.includes(t))) {
+          score += 6;
         }
 
         // Category match
@@ -55,9 +62,9 @@ export const useSearch = () => {
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score)
       .map(item => item.product);
-  }, []);
+  }, [productList]);
 
-  const results = useMemo(() => searchProducts(query), [query, searchProducts]);
+  const results = useMemo(() => searchProducts(query, productList), [query, searchProducts, productList]);
 
   return {
     query,

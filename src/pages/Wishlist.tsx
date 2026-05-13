@@ -1,23 +1,34 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Heart, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, Trash2, ShoppingBag, ArrowRight, X } from 'lucide-react';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useCart } from '@/contexts/CartContext';
-import { formatPrice } from '@/data/products';
+import { formatPrice, Product } from '@/data/products';
 import { toast } from '@/hooks/use-toast';
 import { getProductImage } from '@/lib/utils';
 
 const Wishlist = () => {
   const { items, removeFromWishlist, clearWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedSize, setSelectedSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
 
-  const handleAddToCart = (product: typeof items[0]) => {
-    addToCart(product, product.sizes[0], product.colors[0]);
+  const openVariantSelector = (product: Product) => {
+    setSelectedProduct(product);
+    setSelectedSize(product.sizes?.[0] || '');
+    setSelectedColor(product.colors?.[0] || product.variants?.[0]?.color || '');
+  };
+
+  const handleAddToCart = () => {
+    if (!selectedProduct || !selectedSize || !selectedColor) return;
+    addToCart(selectedProduct, selectedSize, selectedColor);
     toast({
       title: 'Added to cart',
-      description: `${product.name} has been added to your cart.`,
+      description: `${selectedProduct.name} has been added to your cart.`,
     });
+    setSelectedProduct(null);
   };
 
   const handleRemove = (productId: string, productName: string) => {
@@ -30,7 +41,6 @@ const Wishlist = () => {
 
   if (items.length === 0) {
     return (
-      <Layout>
         <div className="container-custom py-20 text-center">
           <div className="max-w-md mx-auto">
             <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
@@ -46,12 +56,11 @@ const Wishlist = () => {
             </Link>
           </div>
         </div>
-      </Layout>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="container-custom py-8 md:py-12">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -136,7 +145,7 @@ const Wishlist = () => {
 
               {/* Add to Cart Button */}
               <button
-                onClick={() => handleAddToCart(product)}
+                onClick={() => openVariantSelector(product)}
                 className="w-full mt-3 py-2 border border-foreground text-foreground text-xs uppercase tracking-widest font-medium flex items-center justify-center gap-2 hover:bg-foreground hover:text-background transition-colors"
               >
                 <ShoppingBag size={14} />
@@ -157,7 +166,106 @@ const Wishlist = () => {
           </Link>
         </div>
       </div>
-    </Layout>
+
+      {/* Variant Selector Modal */}
+      <AnimatePresence>
+        {selectedProduct && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+              onClick={() => setSelectedProduct(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-md bg-background rounded-2xl border border-border z-50 overflow-y-auto max-h-[80vh]"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold">Select Options</h3>
+                  <button
+                    onClick={() => setSelectedProduct(null)}
+                    className="p-2 hover:bg-muted rounded-full transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex gap-4 mb-6">
+                  <div className="w-20 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                    <img
+                      src={getProductImage(selectedProduct)}
+                      alt={selectedProduct.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-medium">{selectedProduct.name}</p>
+                    <p className="text-lg font-bold mt-1">{formatPrice(selectedProduct.price)}</p>
+                  </div>
+                </div>
+
+                {/* Size Selection */}
+                {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
+                  <div className="mb-5">
+                    <h4 className="text-sm font-medium mb-2">Size: <span className="text-muted-foreground">{selectedSize}</span></h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProduct.sizes.map((size) => (
+                        <button
+                          key={size}
+                          onClick={() => setSelectedSize(size)}
+                          className={`min-w-[44px] h-10 px-3 rounded-lg border text-sm font-medium transition-all ${
+                            selectedSize === size
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Color Selection */}
+                {selectedProduct.colors && selectedProduct.colors.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium mb-2">Color: <span className="text-muted-foreground">{selectedColor}</span></h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProduct.colors.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setSelectedColor(color)}
+                          className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                            selectedColor === color
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleAddToCart}
+                  className="w-full py-3 bg-foreground text-background text-sm uppercase tracking-widest font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                >
+                  <ShoppingBag size={16} />
+                  Add to Cart
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 

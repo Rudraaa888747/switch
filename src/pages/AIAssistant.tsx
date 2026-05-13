@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, 
@@ -6,33 +6,39 @@ import {
   User, 
   Mic, 
   Image,
+  Loader2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
-import { products, formatPrice, Product } from '@/data/products';
+import { useAIChat } from '@/hooks/useAIChat';
+import { useProducts } from '@/hooks/useProducts';
+import { formatPrice, Product } from '@/data/products';
 import { getProductImage } from '@/lib/utils';
 
-interface Message {
+interface ChatMessage {
   id: string;
   type: 'user' | 'ai';
   content: string;
+  productIds?: string[];
   products?: Product[];
   timestamp: Date;
 }
 
 const AIAssistant = () => {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
       type: 'ai',
-      content: "Hi! I'm your Switch AI Assistant. 👋 Tell me what you're looking for, and I'll help you find the perfect outfit. You can ask me things like:\n\n• \"Show me black shirts under ₹1500\"\n• \"Casual outfit for college\"\n• \"Formal wear for office\"",
+      content: "Hi! I'm your Switch AI Assistant. 👋 Tell me what you're looking for, and I'll help you find the perfect outfit. You can ask me about products, get style tips, or fashion advice!",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [pendingProductIds, setPendingProductIds] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { sendMessage, isLoading } = useAIChat();
+  const { data: dbProducts = [] } = useProducts();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,61 +46,47 @@ const AIAssistant = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingText]);
 
-  const findProducts = (query: string): Product[] => {
-    const lowerQuery = query.toLowerCase();
-    
-    return products.filter(product => {
-      const matchesName = product.name.toLowerCase().includes(lowerQuery);
-      const matchesCategory = product.category.toLowerCase().includes(lowerQuery) ||
-        (lowerQuery.includes('men') && product.category === 'men') ||
-        (lowerQuery.includes('women') && product.category === 'women');
-      const matchesColor = product.colors.some(c => lowerQuery.includes(c.toLowerCase()));
-      const matchesOccasion = product.occasion.some(o => lowerQuery.includes(o.toLowerCase()));
-      const matchesSubcategory = product.subcategory.toLowerCase().includes(lowerQuery);
-      
-      // Price filter
-      const priceMatch = lowerQuery.match(/under\s*₹?\s*(\d+)/);
-      if (priceMatch) {
-        const maxPrice = parseInt(priceMatch[1]);
-        return product.price <= maxPrice && (matchesName || matchesCategory || matchesColor || matchesOccasion || matchesSubcategory);
+  const extractProductIds = (text: string): string[] => {
+    const match = text.match(/\[PRODUCTS:\s*([^\]]+)\]/);
+    if (match) {
+      return match[1].split(',').map(id => id.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const stripProductTag = (text: string): string => {
+    return text.replace(/\s*\[PRODUCTS:[^\]]*\]/g, '');
+  };
+
+  const resolveProducts = useCallback((ids: string[]): Product[] => {
+    if (ids.length === 0 || dbProducts.length === 0) return [];
+    return dbProducts.filter(p => ids.includes(p.id)).slice(0, 8);
+  }, [dbProducts]);
+
+  useEffect(() => {
+    if (pendingProductIds.length > 0) {
+      const resolved = resolveProducts(pendingProductIds);
+      if (resolved.length > 0) {
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.type === 'ai' && last.products === undefined) {
+            const updated = [...prev];
+            updated[updated.length - 1] = { ...last, products: resolved, productIds: pendingProductIds };
+            return updated;
+          }
+          return prev;
+        });
+        setPendingProductIds([]);
       }
-      
-      return matchesName || matchesColor || matchesOccasion || matchesSubcategory || matchesCategory;
-    }).slice(0, 4);
-  };
-
-  const generateResponse = (query: string, foundProducts: Product[]): string => {
-    const lowerQuery = query.toLowerCase();
-    
-    if (foundProducts.length === 0) {
-      return "I couldn't find exact matches for your query. Let me show you some similar items that might interest you! Try being more specific about colors, occasions, or price range.";
     }
-    
-    if (lowerQuery.includes('casual')) {
-      return `Perfect! Here are some casual picks for you. These are great for everyday wear and super comfortable! 😊`;
-    }
-    
-    if (lowerQuery.includes('formal') || lowerQuery.includes('office')) {
-      return `Looking sharp! Here are some formal options that are perfect for the office or important meetings. 👔`;
-    }
-    
-    if (lowerQuery.includes('party')) {
-      return `Time to turn heads! These party-ready pieces will make you stand out. 🎉`;
-    }
-    
-    if (lowerQuery.match(/under\s*₹?\s*\d+/)) {
-      return `Great finds within your budget! Here are some stylish options that won't break the bank. 💰`;
-    }
-    
-    return `I found ${foundProducts.length} items that match your style! Take a look at these curated picks. ✨`;
-  };
+  }, [pendingProductIds, resolveProducts]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
       content: input,
@@ -102,38 +94,53 @@ const AIAssistant = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const query = input;
     setInput('');
-    setIsTyping(true);
+    setStreamingText('');
 
-    // Simulate AI thinking
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    const chatHistory = messages
+      .filter(m => m.id !== '1')
+      .map(m => ({
+        role: m.type === 'user' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }));
 
-    const foundProducts = findProducts(input);
-    const response = generateResponse(input, foundProducts);
-    
-    const displayProducts = foundProducts.length > 0 ? foundProducts : products.slice(0, 4);
+    let fullResponse = '';
+    let ids: string[] = [];
 
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'ai',
-      content: response,
-      products: displayProducts,
-      timestamp: new Date(),
-    };
-
-    setIsTyping(false);
-    setMessages(prev => [...prev, aiMessage]);
+    await sendMessage(
+      [...chatHistory, { role: 'user', content: query }],
+      (delta) => {
+        fullResponse += delta;
+        setStreamingText(fullResponse);
+        const extracted = extractProductIds(fullResponse);
+        if (extracted.length > 0) ids = extracted;
+      },
+      () => {
+        const cleanText = stripProductTag(fullResponse);
+        setStreamingText('');
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          content: cleanText || "I couldn't process that. Please try asking about our products, styles, or fashion tips!",
+          productIds: ids,
+          timestamp: new Date(),
+        }]);
+        if (ids.length > 0) {
+          setPendingProductIds(ids);
+        }
+      }
+    );
   };
 
   const suggestedQueries = [
-    "Black shirts under ₹1500",
-    "Casual outfit for college",
-    "Party wear for women",
-    "Formal office attire",
+    "Show me black shirts",
+    "Casual outfit ideas",
+    "What's trending?",
+    "Office wear suggestions",
   ];
 
   return (
-    <Layout showFooter={false}>
       <div className="h-[calc(100vh-5rem)] flex flex-col">
         {/* Header */}
         <div className="border-b border-border bg-card">
@@ -144,7 +151,7 @@ const AIAssistant = () => {
               </div>
               <div>
                 <h1 className="text-lg font-semibold">AI Shopping Assistant</h1>
-                <p className="text-sm text-muted-foreground">Ask me anything about fashion <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded ml-2 font-bold uppercase tracking-tighter">Simulated</span></p>
+                <p className="text-sm text-muted-foreground">Powered by Gemini AI</p>
               </div>
             </div>
           </div>
@@ -161,7 +168,6 @@ const AIAssistant = () => {
                   animate={{ opacity: 1, y: 0 }}
                   className={`flex gap-4 ${message.type === 'user' ? 'flex-row-reverse' : ''}`}
                 >
-                  {/* Avatar */}
                   <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center ${
                     message.type === 'ai' 
                       ? 'bg-gradient-to-br from-primary to-accent' 
@@ -174,7 +180,6 @@ const AIAssistant = () => {
                     )}
                   </div>
 
-                  {/* Content */}
                   <div className={`flex-1 max-w-2xl ${message.type === 'user' ? 'text-right' : ''}`}>
                     <div className={`inline-block p-4 rounded-2xl ${
                       message.type === 'user'
@@ -184,9 +189,8 @@ const AIAssistant = () => {
                       <p className="whitespace-pre-line">{message.content}</p>
                     </div>
 
-                    {/* Product Cards */}
                     {message.products && message.products.length > 0 && (
-                      <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {message.products.map((product) => (
                           <Link
                             key={product.id}
@@ -228,8 +232,8 @@ const AIAssistant = () => {
               ))}
             </AnimatePresence>
 
-            {/* Typing Indicator */}
-            {isTyping && (
+            {/* Streaming Response */}
+            {streamingText && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -239,11 +243,23 @@ const AIAssistant = () => {
                   <Sparkles className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div className="p-4 bg-card border border-border rounded-2xl rounded-tl-none">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
+                  <p className="whitespace-pre-line">{streamingText}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Loading Indicator */}
+            {isLoading && !streamingText && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-4"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div className="p-4 bg-card border border-border rounded-2xl rounded-tl-none">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
               </motion.div>
             )}
@@ -288,6 +304,7 @@ const AIAssistant = () => {
               <button
                 type="button"
                 className="p-3 hover:bg-muted rounded-full transition-colors"
+                aria-label="Upload image"
               >
                 <Image size={20} className="text-muted-foreground" />
               </button>
@@ -298,25 +315,26 @@ const AIAssistant = () => {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about fashion..."
                 className="flex-1 input-premium"
+                disabled={isLoading}
               />
               <button
                 type="button"
                 className="p-3 hover:bg-muted rounded-full transition-colors"
+                aria-label="Voice input"
               >
                 <Mic size={20} className="text-muted-foreground" />
               </button>
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={!input.trim() || isLoading}
                 className="p-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <Send size={20} />
+                {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
               </button>
             </form>
           </div>
         </div>
       </div>
-    </Layout>
   );
 };
 

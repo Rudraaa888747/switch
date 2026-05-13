@@ -12,7 +12,6 @@ import {
   Check,
   Loader2
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import ProductCard from '@/components/products/ProductCard';
 import { products } from '@/data/products';
 import { useStyleAnalysis, AnalysisResult } from '@/hooks/useStyleAnalysis';
@@ -21,39 +20,164 @@ import { supabase } from '@/integrations/supabase/client';
 import { ScrollReveal, StaggerContainer, StaggerItem } from '@/components/animations/PageTransition';
 import { Progress } from '@/components/ui/progress';
 
+// Color name to hex mapping for HSL-based matching
+const COLOR_HEX_MAP: Record<string, string> = {
+  'black': '#000000',
+  'navy': '#1a1a4e',
+  'white': '#ffffff',
+  'cream': '#f5f5dc',
+  'blue': '#4a7cad',
+  'red': '#c44536',
+  'pink': '#ffc0cb',
+  'grey': '#808080',
+  'gray': '#808080',
+  'olive': '#556b2f',
+  'beige': '#f5f5dc',
+  'brown': '#8b4513',
+  'green': '#228b22',
+  'purple': '#800080',
+  'yellow': '#ffd700',
+  'orange': '#ffa500',
+  'maroon': '#800000',
+  'teal': '#008080',
+  'coral': '#ff7f50',
+  'lavender': '#e6e6fa',
+  'mint': '#98ff98',
+  'peach': '#ffdab9',
+  'tan': '#d2b48c',
+  'indigo': '#4b0082',
+  'violet': '#8a2be2',
+  'rose': '#ff007f',
+  'chocolate': '#7b3f00',
+  'gold': '#ffd700',
+  'silver': '#c0c0c0',
+  'khaki': '#c3b091',
+  'burgundy': '#800020',
+  'rust': '#b7410e',
+  'mauve': '#e0b0ff',
+  'denim': '#1560bd',
+  'charcoal': '#36454f',
+};
+
+function hexToHsl(hex: string): [number, number, number] {
+  let r = 0, g = 0, b = 0;
+  const cleanHex = hex.replace('#', '');
+  if (cleanHex.length === 3) {
+    r = parseInt(cleanHex[0] + cleanHex[0], 16);
+    g = parseInt(cleanHex[1] + cleanHex[1], 16);
+    b = parseInt(cleanHex[2] + cleanHex[2], 16);
+  } else {
+    r = parseInt(cleanHex.substring(0, 2), 16);
+    g = parseInt(cleanHex.substring(2, 4), 16);
+    b = parseInt(cleanHex.substring(4, 6), 16);
+  }
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return [h * 360, s * 100, l * 100];
+}
+
+function hslDistance(hsl1: [number, number, number], hsl2: [number, number, number]): number {
+  const dh = Math.min(Math.abs(hsl1[0] - hsl2[0]), 360 - Math.abs(hsl1[0] - hsl2[0])) / 180;
+  const ds = Math.abs(hsl1[1] - hsl2[1]) / 100;
+  const dl = Math.abs(hsl1[2] - hsl2[2]) / 100;
+  return Math.sqrt(dh * dh + ds * ds + dl * dl) / Math.sqrt(3);
+}
+
+function getColorHex(colorName: string): string {
+  return COLOR_HEX_MAP[colorName.toLowerCase()] || '#cccccc';
+}
+
+function matchColorScore(productColors: string[], paletteHexes: string[]): number {
+  let maxScore = 0;
+  for (const pc of productColors) {
+    const pcHex = getColorHex(pc);
+    if (pcHex === '#cccccc') continue;
+    const pcHsl = hexToHsl(pcHex);
+    for (const ph of paletteHexes) {
+      const phHsl = hexToHsl(ph);
+      const dist = hslDistance(pcHsl, phHsl);
+      const score = Math.max(0, (1 - dist * 1.5) * 10);
+      maxScore = Math.max(maxScore, score);
+    }
+  }
+  return maxScore;
+}
+
 // Premium easing curve
 const premiumEase: Easing = [0.4, 0, 0.2, 1];
 
 const StyleAdvisor = () => {
   const [image, setImage] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [storedImageUrl, setStoredImageUrl] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { analyzeImage, isAnalyzing } = useStyleAnalysis();
   const { user } = useAuth();
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setImage(reader.result as string);
-        setAnalysisResult(null);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    
+    setImageFile(file);
+    setAnalysisResult(null);
+    setStoredImageUrl(null);
+    
+    // Read as data URL for preview and analysis
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImage(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    
+    // Upload to Supabase Storage for persistence
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `style-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${user?.id || 'anonymous'}/${fileName}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('style-uploads')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      
+      if (!uploadError && uploadData) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('style-uploads')
+          .getPublicUrl(filePath);
+        setStoredImageUrl(publicUrl);
+      }
+    } catch (err) {
+      // Storage bucket may not exist - continue with base64 only
+      console.warn('Could not upload to storage:', err);
     }
   };
 
   const handleAnalyze = async () => {
     if (!image) return;
     
-    // Animate progress bar
     setUploadProgress(0);
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => Math.min(prev + Math.random() * 15, 90));
     }, 300);
     
-    const result = await analyzeImage(image);
+    const result = await analyzeImage(image, {
+      imageUrl: storedImageUrl || undefined,
+      userId: user?.id,
+    });
     
     clearInterval(progressInterval);
     setUploadProgress(100);
@@ -61,19 +185,9 @@ const StyleAdvisor = () => {
     if (result) {
       setAnalysisResult(result);
       
-      // Save analysis to profile if user is logged in
+      // Update profile with latest analysis
       if (user) {
         try {
-          await supabase.from('style_analyses').insert({
-            user_id: user.id,
-            skin_tone: result.skinTone,
-            body_structure: result.bodyStructure,
-            style_category: result.styleCategory,
-            color_palette: result.colorPalette,
-            recommendations: result.recommendations,
-          });
-          
-          // Update profile with latest analysis
           await supabase.from('profiles').update({
             skin_tone: result.skinTone,
             body_structure: result.bodyStructure,
@@ -81,7 +195,7 @@ const StyleAdvisor = () => {
             color_palette: result.colorPalette,
           }).eq('user_id', user.id);
         } catch (error) {
-          console.error('Error saving analysis:', error);
+          console.error('Error updating profile:', error);
         }
       }
     }
@@ -100,33 +214,27 @@ const StyleAdvisor = () => {
   const matchingProducts = useMemo(() => {
     if (!analysisResult) return products.slice(0, 8);
     
-    const paletteColors = analysisResult.colorPalette.map(c => c.toLowerCase());
+    const paletteHexes = analysisResult.colorPalette;
     const styleCategory = analysisResult.styleCategory.toLowerCase();
+    const isFormal = styleCategory.includes('formal');
+    const isCasual = styleCategory.includes('casual');
+    const isParty = styleCategory.includes('party') || styleCategory.includes('street');
+    const isEthnic = styleCategory.includes('ethnic');
     
     return products
       .map(product => {
         let score = 0;
         
-        // Match style category
-        if (product.category.toLowerCase().includes(styleCategory) || 
-            styleCategory.includes(product.category.toLowerCase())) {
-          score += 5;
-        }
+        // Match occasion based on style category
+        const occasionText = product.occasion.join(' ').toLowerCase();
+        if (isFormal && (occasionText.includes('formal') || occasionText.includes('office'))) score += 5;
+        else if (isCasual && occasionText.includes('casual')) score += 5;
+        else if (isParty && (occasionText.includes('party') || occasionText.includes('wedding'))) score += 5;
+        else if (isEthnic && (occasionText.includes('festival') || occasionText.includes('wedding'))) score += 5;
         
-        // Match colors
-        const productColors = product.colors.map(c => c.toLowerCase());
-        productColors.forEach(pc => {
-          paletteColors.forEach(pal => {
-            // Check if product color name matches hex color conceptually (simplified)
-            if ((pc.includes('black') && (pal.includes('#0') || pal.includes('#1') || pal.includes('#2'))) ||
-                (pc.includes('white') && (pal.includes('#f') || pal.includes('#e'))) ||
-                (pc.includes('blue') && (pal.includes('#1a') || pal.includes('#3b'))) ||
-                (pc.includes('beige') && (pal.includes('#f5') || pal.includes('#d'))) ||
-                (pc.includes('red') && (pal.includes('#e') || pal.includes('#f')))) {
-              score += 2;
-            }
-          });
-        });
+        // HSL-based color matching
+        const colorScore = matchColorScore(product.colors, paletteHexes);
+        score += colorScore;
         
         return { product, score };
       })
@@ -142,7 +250,6 @@ const StyleAdvisor = () => {
   };
 
   return (
-    <Layout>
       <div className="container-custom py-12">
         {/* Header */}
         <ScrollReveal className="text-center max-w-2xl mx-auto mb-12">
@@ -564,7 +671,7 @@ const StyleAdvisor = () => {
                   <Sparkles className="w-5 h-5 text-primary-foreground" />
                 </motion.div>
                 <div>
-                  <h2 className="text-2xl font-bold">Curated For You</h2>
+                  <h2 className="text-2xl font-bold">Matching Products</h2>
                   <p className="text-muted-foreground">Items that match your style profile</p>
                 </div>
               </motion.div>
@@ -578,7 +685,6 @@ const StyleAdvisor = () => {
           )}
         </AnimatePresence>
       </div>
-    </Layout>
   );
 };
 

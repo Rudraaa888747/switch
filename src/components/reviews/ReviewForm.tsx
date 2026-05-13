@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import StarRating from './StarRating';
 import { ProductReview } from '@/hooks/useProductReviews';
+import { createAdminNotification } from '@/lib/adminNotifications';
 
 interface ReviewFormProps {
   productId: string;
@@ -113,6 +114,15 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
           helpful_count: Number(data.helpful_count) || 0,
           is_verified_purchase: Boolean(data.is_verified_purchase),
         });
+
+        await createAdminNotification({
+          title: 'New review added',
+          message: `A ${rating}-star review was submitted for product ${productId}.`,
+          type: sentiment === 'negative' ? 'warning' : 'success',
+          eventType: 'review_added',
+          link: '/admin/reviews',
+          metadata: { productId, rating, verified: Boolean(data.is_verified_purchase) },
+        }).catch(() => {});
       }
 
       setIsSubmitted(true);

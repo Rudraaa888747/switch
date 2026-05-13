@@ -10,9 +10,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { supabaseRestInsert } from '@/integrations/supabase/publicRest';
+import { supabaseRestInsert, supabaseRestRequest } from '@/integrations/supabase/publicRest';
 import { toast } from 'sonner';
 import { RETURN_REASON_OPTIONS } from '@/lib/returnReasons';
+import { createAdminNotification } from '@/lib/adminNotifications';
 
 interface ReturnableOrderItem {
   id: string;
@@ -71,24 +72,40 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
 
     setIsSubmitting(true);
     try {
-      const requestRows = await supabaseRestInsert<{ id: string }[]>(
+      console.log('[ReturnModal] Initiating submission for order:', order.order_id || order.id);
+      
+      const requestPayload = {
+        order_id: order.source_id,
+        user_id: order.user_id,
+        reason,
+        comment: comment || null,
+        additional_details: comment || null,
+        images: [],
+        status: 'requested',
+        refund_method: refundMethod === 'cod' ? 'wallet' : refundMethod,
+      };
+
+      console.log('[ReturnModal] Request payload:', requestPayload);
+
+      const { data: requestRows } = await supabaseRestRequest<{ id: string }[]>(
         'return_requests',
-        [
-          {
-            order_id: order.source_id,
-            user_id: order.user_id,
-            reason,
-            comment: comment || null,
-            additional_details: comment || null,
-            images: [],
-            status: 'requested',
-            refund_method: refundMethod === 'cod' ? 'wallet' : refundMethod,
-          },
-        ],
-        accessToken
+        {
+          method: 'POST',
+          body: JSON.stringify([requestPayload]),
+          authToken: accessToken,
+          headers: {
+            Prefer: 'return=representation',
+          }
+        }
       );
 
+      if (!requestRows || requestRows.length === 0) {
+        console.error('[ReturnModal] No data returned from return_requests insert');
+        throw new Error('Failed to create return request record');
+      }
+
       const requestData = requestRows[0];
+      console.log('[ReturnModal] Return request created:', requestData.id);
 
       const returnItems = Array.from(selectedItems.entries()).map(([itemId, qty]) => ({
         return_request_id: requestData.id,
@@ -96,14 +113,41 @@ const ReturnItemsModal = ({ isOpen, onClose, order, onSuccess, accessToken }: Re
         quantity: qty,
       }));
 
-      await supabaseRestInsert('return_request_items', returnItems, accessToken);
+      console.log('[ReturnModal] Submitting return items:', returnItems);
+      await supabaseRestRequest('return_request_items', {
+        method: 'POST',
+        body: JSON.stringify(returnItems),
+        authToken: accessToken,
+        headers: {
+          Prefer: 'return=representation',
+        }
+      });
+
+      console.log('[ReturnModal] Return items submitted successfully');
+
+      await createAdminNotification({
+        title: 'New return request',
+        message: `Return requested for order ${order.order_id || order.source_id}.`,
+        type: 'warning',
+        eventType: 'return_request',
+        link: '/admin/returns',
+        metadata: {
+          returnRequestId: requestData.id,
+          orderId: order.order_id || order.source_id,
+          userId: order.user_id,
+          reason,
+          itemCount: returnItems.length,
+        },
+      }).catch((nErr) => console.error('[ReturnModal] Admin notification failed:', nErr));
 
       setStep(3);
       toast.success('Return request submitted successfully');
       onSuccess();
-    } catch (error: unknown) {
-      console.error('Return error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to submit return request');
+    } catch (error: any) {
+      console.error('[ReturnModal] Submission error:', error);
+      const errorMessage = error?.message || 'Failed to submit return request';
+      const errorHint = error?.hint ? ` (${error.hint})` : '';
+      toast.error(`${errorMessage}${errorHint}`);
     } finally {
       setIsSubmitting(false);
     }

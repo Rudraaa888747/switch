@@ -1,16 +1,15 @@
 import { Link } from 'react-router-dom';
-import { motion, type Easing, useScroll, useTransform, AnimatePresence, useInView } from 'framer-motion';
-import { ArrowRight, Zap, RotateCcw, Shield, Star, ChevronDown } from 'lucide-react';
+import { motion, type Easing, AnimatePresence, useInView } from 'framer-motion';
+import { ArrowRight, Zap, RotateCcw, Shield, Star, Loader2 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
-import Layout from '@/components/layout/Layout';
 import ProductCard from '@/components/products/ProductCard';
-import { products } from '@/data/products';
-import heroBanner from '@/assets/hero-banner.webp';
+import HeroCinematic from '@/components/hero/HeroCinematic';
 import categoryOuterwear from '@/assets/category-outerwear.webp';
 import categoryBottoms from '@/assets/category-bottoms.webp';
 import categoryAccessories from '@/assets/category-accessories.webp';
 import { ScrollReveal, StaggerContainer, StaggerItem } from '@/components/animations/PageTransition';
-import { LetterByLetter } from '@/components/animations/TypewriterText';
+import SmartRecommendations from '@/components/recommendations/SmartRecommendations';
+import { useProducts } from '@/hooks/useProducts';
 
 // Premium easing curve
 const premiumEase: Easing = [0.4, 0, 0.2, 1];
@@ -77,19 +76,11 @@ const Reveal = ({ children, delay = 0, className = '', y = 28 }: { children: Rea
 };
 
 const Home = () => {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  });
 
-  // Parallax effect for hero image
-  const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '30%']);
-  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.3]);
-
-  // Get products without modifying them - just selecting first 8
-  const displayProducts = products.slice(0, 8);
+  // Fetch men and women products separately
+  const { data: menProducts = [], isLoading: isLoadingMen } = useProducts({ category: 'men', limit: 4 });
+  const { data: womenProducts = [], isLoading: isLoadingWomen } = useProducts({ category: 'women', limit: 4 });
+  const isLoadingProducts = isLoadingMen || isLoadingWomen;
 
   const categories = [
     {
@@ -123,102 +114,8 @@ const Home = () => {
   }, [email]);
 
   return (
-    <Layout>
-      {/* Hero Section with Parallax */}
-      <section
-        ref={heroRef}
-        className="relative h-[80vh] md:h-[90vh] flex items-center justify-center overflow-hidden"
-      >
-        {/* Hero Image with Parallax and Premium Zoom Animation */}
-        <motion.div
-          className="absolute inset-0"
-          style={{ y: heroY, scale: heroScale, opacity: heroOpacity }}
-        >
-          <motion.img
-            src={heroBanner}
-            alt="SWITCH Collection"
-            className="w-full h-full object-cover object-center"
-            initial={{ scale: 1.1 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 1.8, ease: premiumEase }}
-          />
-          {/* Dark overlay with animated reveal */}
-          <motion.div
-            className="absolute inset-0 bg-black/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1, delay: 0.3 }}
-          />
-        </motion.div>
-
-        <div className="relative z-10 text-center px-4">
-          {/* Text backdrop for enhanced readability */}
-          <motion.div
-            className="bg-black/30 backdrop-blur-sm px-8 py-10 md:px-16 md:py-14 rounded-sm"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.4, ease: premiumEase }}
-          >
-            {/* Animated headline with letter-by-letter effect */}
-            <motion.h1
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.6 }}
-              className="text-3xl md:text-5xl lg:text-6xl font-light tracking-[0.15em] md:tracking-[0.2em] text-white mb-6 drop-shadow-lg"
-            >
-              <LetterByLetter
-                text="ADAPT. TRANSFORM. EXPRESS."
-                delay={0.8}
-                className="text-white"
-              />
-            </motion.h1>
-
-            {/* CTA with bounce effect */}
-            <motion.div
-              initial={{ opacity: 0, y: 30, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{
-                duration: 0.6,
-                delay: 1.8,
-                ease: premiumEase,
-                type: 'spring',
-                stiffness: 200,
-                damping: 15,
-              }}
-            >
-              <Link
-                to="/shop"
-                className="inline-flex items-center gap-2 bg-white text-black px-8 py-3 uppercase tracking-widest text-xs font-medium 
-                         transition-all duration-300 hover:bg-black hover:text-white hover:scale-[1.02] active:scale-[0.98]
-                         btn-shine group"
-              >
-                Shop Collection
-                <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
-              </Link>
-            </motion.div>
-          </motion.div>
-        </div>
-
-        {/* Scroll indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 2.2, duration: 0.6 }}
-        >
-          <motion.div
-            className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center"
-            animate={{ y: [0, 5, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <motion.div
-              className="w-1 h-2 bg-white/70 rounded-full mt-2"
-              animate={{ opacity: [1, 0.3, 1], y: [0, 8, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
-        </motion.div>
-      </section>
+    <>
+      <HeroCinematic />
 
       {/* ── TRUST MARQUEE ── */}
       <Marquee />
@@ -255,7 +152,7 @@ const Home = () => {
                     />
                     {/* 3D depth shadow on hover */}
                     <motion.div
-                      className="absolute inset-0 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                      className="absolute inset-0 shadow-[0_20px_50px_-15px_hsl(var(--foreground)/0.3)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                     />
                   </motion.div>
                 </Link>
@@ -266,20 +163,20 @@ const Home = () => {
       </section>
 
       {/* ── STATS ── */}
-      <section className="border-y border-border/30 py-12 md:py-16 bg-muted/20">
+      <section className="stats-luxury-panel section-seam py-8 md:py-12">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 gap-5 md:gap-8 lg:grid-cols-4">
             {[
               { n: 50000, s: '+', l: 'Happy customers' },
               { n: 120, s: '+', l: 'Modular pieces' },
               { n: 98, s: '%', l: 'Satisfaction' },
               { n: 4, s: ' yrs', l: 'Of innovation' },
             ].map((stat, i) => (
-              <Reveal key={stat.l} delay={i * 0.08} className="text-center">
-                <p className="text-3xl md:text-4xl font-light tracking-tight mb-1.5">
+              <Reveal key={stat.l} delay={i * 0.08} className="rounded-[1.4rem] px-3 py-4 text-center">
+                <p className="text-[2.15rem] md:text-[2.8rem] font-light tracking-tight text-foreground">
                   <Counter to={stat.n} suffix={stat.s} />
                 </p>
-                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{stat.l}</p>
+                <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground/75">{stat.l}</p>
               </Reveal>
             ))}
           </div>
@@ -289,6 +186,7 @@ const Home = () => {
       {/* Product Grid with staggered fade-up */}
       <section className="py-16 md:py-24 bg-background">
         <div className="container-custom">
+          {/* Men's Collection */}
           <ScrollReveal className="text-center mb-12">
             <motion.h2
               className="text-xs uppercase tracking-[0.2em] font-medium text-muted-foreground mb-2"
@@ -297,7 +195,7 @@ const Home = () => {
               viewport={{ once: true }}
               transition={{ delay: 0.1, duration: 0.5 }}
             >
-              Featured
+              Menswear
             </motion.h2>
             <motion.p
               className="text-2xl md:text-3xl font-light tracking-wide"
@@ -306,15 +204,66 @@ const Home = () => {
               viewport={{ once: true }}
               transition={{ delay: 0.2, duration: 0.5 }}
             >
-              New Arrivals
+              For Him
             </motion.p>
           </ScrollReveal>
 
-          <div className="grid-product">
-            {displayProducts.map((product, index) => (
-              <ProductCard key={product.id} product={product} index={index} />
-            ))}
+          <div className="relative min-h-[200px]">
+            {isLoadingProducts ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse font-light tracking-widest text-xs uppercase">Loading collection...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                {menProducts.map((product, index) => (
+                  <ProductCard key={product.id} product={product} index={index} />
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Women's Collection */}
+          <ScrollReveal className="text-center mb-12 mt-20">
+            <motion.h2
+              className="text-xs uppercase tracking-[0.2em] font-medium text-muted-foreground mb-2"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1, duration: 0.5 }}
+            >
+              Womenswear
+            </motion.h2>
+            <motion.p
+              className="text-2xl md:text-3xl font-light tracking-wide"
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+            >
+              For Her
+            </motion.p>
+          </ScrollReveal>
+
+          <div className="relative min-h-[200px]">
+            {isLoadingProducts ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse font-light tracking-widest text-xs uppercase">Loading collection...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                {womenProducts.map((product, index) => (
+                  <ProductCard key={product.id} product={product} index={index} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Curated Picks */}
+          <section className="mt-20">
+            <SmartRecommendations type="curated" limit={4} />
+          </section>
 
           <ScrollReveal delay={0.4} className="text-center mt-12">
             <Link
@@ -369,16 +318,16 @@ const Home = () => {
       </section>
 
       {/* ── PERKS ── */}
-      <section className="py-16 md:py-24 bg-muted/20 border-y border-border/30">
+      <section className="py-16 md:py-24 bg-muted/12 border-y border-border/20">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
             {perks.map(({ Icon, title, desc }, i) => (
-              <Reveal key={title} delay={i * 0.08} className="text-center">
-                <div className="w-10 h-10 rounded-full border border-border/50 flex items-center justify-center mx-auto mb-4">
-                  <Icon size={16} strokeWidth={1.5} className="text-foreground/70" />
+              <Reveal key={title} delay={i * 0.08} className="text-center group">
+                <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-border/50 transition-all duration-500 group-hover:border-foreground/30 group-hover:shadow-[0_0_24px_-8px_hsl(var(--foreground)/0.12)]">
+                  <Icon size={17} strokeWidth={1.3} className="text-foreground/60 transition-all duration-500 group-hover:text-foreground/90" />
                 </div>
-                <p className="text-[11px] uppercase tracking-[0.18em] font-medium mb-1.5">{title}</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-foreground/90">{title}</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground/80">{desc}</p>
               </Reveal>
             ))}
           </div>
@@ -442,7 +391,7 @@ const Home = () => {
           </Reveal>
         </div>
       </section>
-    </Layout>
+    </>
   );
 };
 

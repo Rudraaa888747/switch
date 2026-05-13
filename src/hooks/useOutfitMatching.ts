@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
-import { Product, products } from '@/data/products';
+import { Product } from '@/data/products';
+import { supabase } from '@/integrations/supabase/client';
 
 const SYSTEM_PROMPT = `You are a fashion expert who helps create perfect outfit combinations. Given a selected product and a list of available products, identify the best matching items based on:
 1. Color harmony (complementary, analogous, or neutral pairings)
@@ -19,10 +20,17 @@ Respond ONLY with a JSON object in this format:
 export const useOutfitMatching = () => {
   const [isMatching, setIsMatching] = useState(false);
 
-  const getAIMatches = async (selectedProduct: Product): Promise<Product[]> => {
+  const getAIMatches = useCallback(async (selectedProduct: Product): Promise<Product[]> => {
     setIsMatching(true);
 
     try {
+      const { data: allProducts } = await supabase
+        .from('products')
+        .select('*')
+        .limit(200);
+
+      const products = allProducts || [];
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/outfit-matching`,
         {
@@ -48,22 +56,24 @@ export const useOutfitMatching = () => {
         throw new Error(result.error);
       }
 
-      // Map IDs back to products
       const matchingProducts = result.matchingIds
-        .map((id: string) => products.find(p => p.id === id))
+        .map((id: string) => products.find((p: Product) => p.id === id))
         .filter((p: Product | undefined): p is Product => p !== undefined);
 
-      return matchingProducts.length > 0 ? matchingProducts : getFallbackMatches(selectedProduct);
+      return matchingProducts.length > 0 ? matchingProducts : getFallbackMatches(selectedProduct, products);
     } catch (error) {
       console.error('Outfit matching error:', error);
-      return getFallbackMatches(selectedProduct);
+      const { data: allProducts } = await supabase
+        .from('products')
+        .select('*')
+        .limit(200);
+      return getFallbackMatches(selectedProduct, allProducts || []);
     } finally {
       setIsMatching(false);
     }
-  };
+  }, []);
 
-  // Fallback matching logic (original color harmony rules)
-  const getFallbackMatches = (selectedProduct: Product): Product[] => {
+  const getFallbackMatches = (selectedProduct: Product, allProducts: Product[]): Product[] => {
     const colorHarmony: Record<string, string[]> = {
       'Black': ['White', 'Grey', 'Navy', 'Red', 'Pink', 'Cream', 'Beige'],
       'White': ['Black', 'Navy', 'Blue', 'Pink', 'Grey', 'Beige', 'Floral'],
@@ -90,7 +100,7 @@ export const useOutfitMatching = () => {
       }
     });
 
-    return products
+    return allProducts
       .filter(p => p.id !== selectedProduct.id)
       .filter(p => {
         const hasMatchingColor = p.colors.some(color => 

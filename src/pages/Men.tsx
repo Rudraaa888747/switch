@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Grid3X3, LayoutGrid, SlidersHorizontal, X } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
+import { ChevronDown, Grid3X3, LayoutGrid, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import ProductCard from '@/components/products/ProductCard';
 import { products } from '@/data/products';
 import menHeroBanner from '@/assets/men-hero-banner.webp';
+import { useProducts } from '@/hooks/useProducts';
 
 const Men = () => {
   const [gridSize, setGridSize] = useState<'small' | 'large'>('small');
@@ -28,10 +28,12 @@ const Men = () => {
   const colors = ['Black', 'White', 'Navy', 'Grey', 'Blue', 'Olive'];
   const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
   const occasions = ['Casual', 'Formal', 'Party', 'Office', 'Travel'];
+  
+  const { data: dbProducts = [], isLoading } = useProducts({ category: 'men', limit: 24 });
+  const allMenProducts = dbProducts.length > 0 ? dbProducts : products.filter(p => p.category === 'men');
 
-  // Filter only men's products
   const menProducts = useMemo(() => {
-    let result = products.filter(p => p.category === 'men');
+    let result = [...allMenProducts];
 
     // Price range filter
     if (filters.priceRange !== 'all') {
@@ -45,7 +47,7 @@ const Men = () => {
     // Color filter
     if (filters.colors.length > 0) {
       result = result.filter(p => 
-        p.colors.some(c => filters.colors.includes(c))
+        p.colors.some(c => filters.colors.some(fc => c.toLowerCase().includes(fc.toLowerCase())))
       );
     }
 
@@ -72,7 +74,11 @@ const Men = () => {
         result.sort((a, b) => b.price - a.price);
         break;
       case 'newest':
-        result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+        result.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return dateB - dateA;
+        });
         break;
       case 'popular':
       default:
@@ -80,7 +86,7 @@ const Men = () => {
     }
 
     return result;
-  }, [filters, sortBy]);
+  }, [allMenProducts, filters, sortBy]);
 
   const toggleColor = (color: string) => {
     setFilters(prev => ({
@@ -117,7 +123,7 @@ const Men = () => {
   ].filter(Boolean).length;
 
   return (
-    <Layout>
+    <>
       {/* Hero Section */}
       <section className="relative h-[60vh] md:h-[70vh] overflow-hidden">
         <img
@@ -334,7 +340,12 @@ const Men = () => {
             </div>
 
             {/* Products Grid */}
-            {menProducts.length > 0 ? (
+            {isLoading && dbProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-40 gap-3">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse tracking-widest text-xs">LOADING MEN'S COLLECTION...</p>
+              </div>
+            ) : menProducts.length > 0 ? (
               <div className={`grid gap-6 md:gap-8 ${
                 gridSize === 'large' 
                   ? 'grid-cols-2 lg:grid-cols-3'
@@ -494,7 +505,7 @@ const Men = () => {
           </motion.div>
         </>
       )}
-    </Layout>
+    </>
   );
 };
 

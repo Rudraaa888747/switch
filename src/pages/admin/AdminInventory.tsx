@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Package,
@@ -10,8 +11,10 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
-import { products, formatPrice } from '@/data/products';
-import { normalizeImageUrl } from '@/lib/utils';
+import { formatPrice } from '@/data/products';
+import type { Product } from '@/data/products';
+import { useProducts } from '@/hooks/useProducts';
+import { createAdminNotification } from '@/lib/adminNotifications';
 import {
   BarChart,
   Bar,
@@ -22,29 +25,103 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-// Mock inventory data
-const inventoryData = products.map((product, index) => ({
-  ...product,
-  stock: [45, 12, 8, 30, 5, 22, 35, 18, 3, 28, 15, 10][index % 12],
-  trend: ['up', 'down', 'stable', 'up', 'down', 'up', 'stable', 'up', 'down', 'stable', 'up', 'down'][index % 12] as 'up' | 'down' | 'stable',
-  demandLevel: ['high', 'medium', 'low', 'high', 'low', 'medium', 'high', 'medium', 'low', 'medium', 'high', 'medium'][index % 12] as 'high' | 'medium' | 'low',
-}));
+const computeStock = (product: { variants: Array<{ stock?: number }>; stockQuantity?: number }): number => {
+  let total = 0;
+  for (const v of product.variants) {
+    if (v.stock !== undefined) {
+      total += v.stock;
+    }
+  }
+  if (total > 0) return total;
+  return Number(product.stockQuantity || 0);
+};
 
-const stockChartData = [
-  { name: 'Shirts', inStock: 120, lowStock: 15 },
-  { name: 'Pants', inStock: 85, lowStock: 8 },
-  { name: 'Dresses', inStock: 95, lowStock: 12 },
-  { name: 'Jackets', inStock: 45, lowStock: 5 },
-  { name: 'Accessories', inStock: 200, lowStock: 20 },
-];
+const computeTrend = (product: Product): 'up' | 'down' | 'stable' => {
+  if (product.rating >= 4.6) return 'up';
+  if (product.rating >= 4.3) return 'stable';
+  return 'down';
+};
+
+const computeDemand = (product: Product): 'high' | 'medium' | 'low' => {
+  if (product.isTrending) return 'high';
+  if (product.rating >= 4.5) return 'medium';
+  return 'low';
+};
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.07 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
+};
+
+const cardHover = {
+  rest: { scale: 1 },
+  hover: { scale: 1.02, transition: { duration: 0.2 } },
+};
 
 const AdminInventory = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [stockFilter, setStockFilter] = useState<string>('all');
+  const { data: products = [], isLoading } = useProducts();
+
+  const inventoryData = useMemo(() => products.map((product) => ({
+    ...product,
+    stock: computeStock(product),
+    trend: computeTrend(product),
+    demandLevel: computeDemand(product),
+  })), [products]);
+
+  const stockChartData = useMemo(() => Array.from(
+    inventoryData.reduce<Map<string, { inStock: number; lowStock: number }>>((acc, product) => {
+      const cat = product.subcategory || product.category;
+      const existing = acc.get(cat) || { inStock: 0, lowStock: 0 };
+      existing.inStock += product.stock;
+      if (product.stock <= 10) existing.lowStock += product.stock;
+      acc.set(cat, existing);
+      return acc;
+    }, new Map())
+  ).map(([name, data]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    ...data,
+  })), [inventoryData]);
 
   const lowStockItems = inventoryData.filter(item => item.stock <= 10);
   const outOfStockItems = inventoryData.filter(item => item.stock <= 3);
   const healthyStockItems = inventoryData.filter(item => item.stock > 20);
+
+  useEffect(() => {
+    const key = 'switch_admin_low_stock_notified_at';
+    const existingRaw = localStorage.getItem(key);
+    const existing: Record<string, number> = existingRaw ? JSON.parse(existingRaw) as Record<string, number> : {};
+    const now = Date.now();
+    const nextState = { ...existing };
+
+    const notifyTargets = inventoryData.filter((item) => item.stock > 0 && item.stock <= 10);
+    if (notifyTargets.length === 0) return;
+
+    notifyTargets.forEach((item) => {
+      const notifiedAt = Number(existing[item.id] || 0);
+      const twelveHours = 12 * 60 * 60 * 1000;
+      if (now - notifiedAt < twelveHours) return;
+
+      createAdminNotification({
+        title: item.stock <= 3 ? 'Critical inventory alert' : 'Low inventory alert',
+        message: `${item.name} is at ${item.stock} unit${item.stock === 1 ? '' : 's'} remaining.`,
+        type: item.stock <= 3 ? 'error' : 'warning',
+        eventType: 'inventory_low',
+        link: '/admin/inventory',
+        metadata: { productId: item.id, stock: item.stock, category: item.category },
+      }).catch(() => {});
+
+      nextState[item.id] = now;
+    });
+
+    localStorage.setItem(key, JSON.stringify(nextState));
+  }, [inventoryData]);
 
   const filteredInventory = inventoryData.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -66,57 +143,54 @@ const AdminInventory = () => {
     switch (demand) {
       case 'high': return 'bg-primary/10 text-primary';
       case 'medium': return 'bg-blue-500/10 text-blue-500';
-      case 'low': return 'bg-gray-500/10 text-gray-500';
+      case 'low': return 'bg-muted text-muted-foreground';
     }
   };
 
   return (
     <AdminLayout>
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="admin-gradient-shell space-y-6 p-4 md:p-6 lg:p-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <h1 className="text-3xl font-bold mb-1">Inventory</h1>
-          <p className="text-muted-foreground">Monitor stock levels and demand patterns</p>
+          <h1 className="mb-1 text-3xl font-bold">Inventory</h1>
+          <p className="text-muted-foreground">Monitor stock levels, demand signals, and replenishment priorities.</p>
         </motion.div>
 
         {/* Stats */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
           className="grid grid-cols-2 lg:grid-cols-4 gap-4"
         >
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-5 h-5 text-primary" />
-              <span className="text-sm text-muted-foreground">Total Products</span>
-            </div>
-            <p className="text-2xl font-bold">{products.length}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-5 h-5 text-green-500" />
-              <span className="text-sm text-muted-foreground">Healthy Stock</span>
-            </div>
-            <p className="text-2xl font-bold text-green-500">{healthyStockItems.length}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              <span className="text-sm text-muted-foreground">Low Stock</span>
-            </div>
-            <p className="text-2xl font-bold text-yellow-500">{lowStockItems.length}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingDown className="w-5 h-5 text-red-500" />
-              <span className="text-sm text-muted-foreground">Critical</span>
-            </div>
-            <p className="text-2xl font-bold text-red-500">{outOfStockItems.length}</p>
-          </div>
+          {[
+            { icon: Package, label: 'Total Products', value: products.length, color: 'text-primary' },
+            { icon: TrendingUp, label: 'Healthy Stock', value: healthyStockItems.length, color: 'text-green-500' },
+            { icon: AlertTriangle, label: 'Low Stock', value: lowStockItems.length, color: 'text-yellow-500' },
+            { icon: TrendingDown, label: 'Critical', value: outOfStockItems.length, color: 'text-red-500' },
+          ].map((stat) => (
+            <motion.div key={stat.label} variants={itemVariants} whileHover="hover" initial="rest">
+              <motion.div variants={cardHover}>
+                <div className="admin-glass-card cursor-default rounded-[1.4rem] p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                    <span className="text-sm text-muted-foreground">{stat.label}</span>
+                  </div>
+                  <motion.p
+                    className={`text-2xl font-bold ${stat.color}`}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4, delay: 0.2 }}
+                  >
+                    {stat.value}
+                  </motion.p>
+                </div>
+              </motion.div>
+            </motion.div>
+          ))}
         </motion.div>
 
         {/* Chart */}
@@ -124,7 +198,8 @@ const AdminInventory = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-card border border-border rounded-xl p-6"
+          whileHover={{ scale: 1.005, transition: { duration: 0.2 } }}
+          className="admin-glass-card rounded-[1.55rem] p-6"
         >
           <h2 className="text-lg font-semibold mb-4">Stock Distribution by Category</h2>
           <ResponsiveContainer width="100%" height={250}>
@@ -150,7 +225,7 @@ const AdminInventory = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="flex flex-col sm:flex-row gap-4"
+          className="flex flex-col gap-4 sm:flex-row"
         >
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -179,9 +254,14 @@ const AdminInventory = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="bg-card border border-border rounded-xl overflow-hidden"
+          className="admin-glass-card admin-table-responsive overflow-hidden rounded-[1.55rem]"
         >
           <div className="overflow-x-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : (
             <table className="w-full">
               <thead className="bg-muted/50">
                 <tr>
@@ -203,10 +283,10 @@ const AdminInventory = () => {
                       transition={{ delay: index * 0.02 }}
                       className="hover:bg-muted/30 transition-colors"
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4" data-label="Product">
                         <div className="flex items-center gap-3">
                           <img
-                            src={normalizeImageUrl(item.variants?.[0]?.images?.[0] || item.image || '')}
+                            src={item.variants?.[0]?.images?.[0] || item.image || ''}
                             alt={item.name}
                             className="w-10 h-12 object-cover rounded-lg"
                           />
@@ -216,20 +296,20 @@ const AdminInventory = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4" data-label="Stock">
                         <span className="font-bold text-sm">{item.stock} units</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4" data-label="Status">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
                           {status.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4" data-label="Demand">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getDemandBadge(item.demandLevel)}`}>
                           {item.demandLevel} Demand
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4" data-label="Trend">
                         {item.trend === 'up' ? (
                           <span className="flex items-center gap-1 text-green-500 text-sm">
                             <ArrowUp size={14} /> Rising
@@ -247,6 +327,7 @@ const AdminInventory = () => {
                 })}
               </tbody>
             </table>
+            )}
           </div>
         </motion.div>
       </div>

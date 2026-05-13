@@ -52,7 +52,7 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
         <h2 className="text-xl font-semibold">Customer Reviews</h2>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Review Form */}
         <div className="lg:col-span-1">
           <ReviewForm

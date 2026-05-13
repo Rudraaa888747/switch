@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { ArrowDownLeft, ArrowUpRight, Calendar, CreditCard, Filter, Wallet as WalletIcon } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -70,14 +69,15 @@ const Wallet = () => {
       return Number(data?.wallet_balance ?? user?.walletBalance ?? 0);
     },
     enabled: !!userId,
-    refetchInterval: 15_000,
+    staleTime: 30_000,
+    retry: 2,
   });
 
-  const { data: transactions = [], isLoading } = useQuery({
+  const { data: transactions = [], isLoading, isError, error } = useQuery({
     queryKey: ['wallet-transactions', userId, filterType],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!userId) return [];
-      
+
       let query = supabase
         .from('wallet_transactions')
         .select('*')
@@ -93,6 +93,9 @@ const Wallet = () => {
       return data as WalletTransaction[];
     },
     enabled: !!userId,
+    staleTime: 30_000,
+    retry: 1,
+    retryDelay: 2000,
   });
 
   if (!isAuthenticated || !user) {
@@ -131,7 +134,6 @@ const Wallet = () => {
   };
 
   return (
-    <Layout>
       <div className="container-custom py-8 md:py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -147,22 +149,23 @@ const Wallet = () => {
           </div>
 
           {/* Balance Card */}
-          <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <Card className="relative overflow-hidden border-border/60 bg-gradient-to-br from-card to-muted/20">
+            <div className="absolute right-0 top-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-foreground/[0.03]" />
             <CardContent className="p-6 md:p-8">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
                     Available Balance
                   </p>
-                  <p className="text-4xl md:text-5xl font-bold">
+                  <p className="text-3xl md:text-5xl font-semibold tracking-tight">
                     {formatPrice(profileBalance ?? user.walletBalance ?? 0)}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-muted-foreground/70 mt-2">
                     Use wallet balance during checkout
                   </p>
                 </div>
-                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary/10 flex items-center justify-center">
-                  <WalletIcon className="w-8 h-8 md:w-10 md:h-10 text-primary" />
+                <div className="flex h-16 w-16 md:h-20 md:w-20 flex-shrink-0 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-border/50">
+                  <WalletIcon className="h-7 w-7 md:h-9 md:w-9 text-foreground/60" />
                 </div>
               </div>
             </CardContent>
@@ -190,15 +193,34 @@ const Wallet = () => {
             </CardHeader>
             <CardContent className="p-0">
               {isLoading ? (
+                <div className="space-y-4 p-6 md:p-8">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex animate-pulse items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-muted" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-3/5 rounded bg-muted" />
+                        <div className="h-3 w-1/4 rounded bg-muted/60" />
+                      </div>
+                      <div className="text-right">
+                        <div className="h-4 w-16 rounded bg-muted" />
+                        <div className="mt-1 h-3 w-12 rounded bg-muted/60" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : isError ? (
                 <div className="p-12 text-center">
-                  <WalletIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
-                  <p className="text-muted-foreground">Loading transactions...</p>
+                  <CreditCard className="w-10 h-10 mx-auto mb-4 text-muted-foreground/50" />
+                  <p className="text-muted-foreground mb-1">Unable to load transactions</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    {error instanceof Error ? error.message : 'Please try again later'}
+                  </p>
                 </div>
               ) : transactions.length === 0 ? (
                 <div className="p-12 text-center">
-                  <CreditCard className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground mb-2">No transactions yet</p>
-                  <p className="text-xs text-muted-foreground">
+                  <CreditCard className="w-10 h-10 mx-auto mb-4 text-muted-foreground/50" />
+                  <p className="text-muted-foreground mb-1">No transactions yet</p>
+                  <p className="text-xs text-muted-foreground/60">
                     Your wallet transactions will appear here
                   </p>
                 </div>
@@ -304,7 +326,6 @@ const Wallet = () => {
           </Card>
         </motion.div>
       </div>
-    </Layout>
   );
 };
 

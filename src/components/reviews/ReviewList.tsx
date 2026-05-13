@@ -2,7 +2,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ThumbsUp, User, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import StarRating from './StarRating';
-import { useProductReviews } from '@/hooks/useProductReviews';
+import { ProductReview, useProductReviews } from '@/hooks/useProductReviews';
+import { useProduct } from '@/hooks/useProduct';
+import { buildFallbackReviews } from '@/lib/utils';
 
 interface ReviewListProps {
   productId: string;
@@ -29,8 +31,23 @@ const SentimentBadge = ({ sentiment }: { sentiment: string | null }) => {
 
 const ReviewList = ({ productId }: ReviewListProps) => {
   const { data, isLoading, isError } = useProductReviews(productId);
-  const reviews = data?.reviews || [];
-  const stats = data?.summary || { average: 0, count: 0 };
+  const { data: product } = useProduct(productId);
+  const dbReviews = data?.reviews || [];
+  const dbStats = data?.summary || { average: 0, count: 0 };
+
+  const hasDbReviews = dbReviews.length > 0;
+  const fallbackReviews = product ? buildFallbackReviews(product) : [];
+  const reviews = hasDbReviews ? dbReviews : fallbackReviews;
+  
+  // Use stats from DB if available, otherwise from fallback
+  const stats = hasDbReviews
+    ? dbStats
+    : {
+        average: fallbackReviews.length > 0
+          ? Math.round((fallbackReviews.reduce((sum, review) => sum + review.rating, 0) / fallbackReviews.length) * 10) / 10
+          : 0,
+        count: fallbackReviews.length,
+      };
 
   if (isLoading) {
     return (
@@ -73,7 +90,7 @@ const ReviewList = ({ productId }: ReviewListProps) => {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-6 p-4 bg-muted/30 rounded-xl"
+        className="theme-surface flex items-center gap-6 rounded-[1.35rem] p-4"
       >
         <div className="text-center">
           <motion.span
@@ -102,7 +119,7 @@ const ReviewList = ({ productId }: ReviewListProps) => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.08 }}
-            className="p-5 bg-card border border-border rounded-xl"
+            className="theme-surface rounded-[1.35rem] p-5"
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -116,6 +133,7 @@ const ReviewList = ({ productId }: ReviewListProps) => {
                       <span className="text-xs text-primary font-medium">Verified Purchase</span>
                     )}
                   </div>
+                  <p className="text-sm font-medium">{review.author_name || 'Verified Customer'}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatDistanceToNow(new Date(review.created_at), { addSuffix: true })}
                   </p>

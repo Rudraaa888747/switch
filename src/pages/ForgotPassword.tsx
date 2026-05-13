@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, type Easing } from 'framer-motion';
-import { Mail, ArrowLeft, CheckCircle, Sun, Moon, KeyRound } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from '@/hooks/use-toast';
 import switchLogo from '@/assets/switch-logo.png';
 
@@ -80,7 +79,6 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const { resetPassword, isLoading } = useAuth();
-  const { theme, toggleTheme } = useTheme();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,42 +159,6 @@ const ForgotPassword = () => {
         {/* Grid Pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--foreground)/0.02)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--foreground)/0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       </div>
-
-      {/* Theme Toggle - Fixed Position */}
-      <motion.button
-        onClick={toggleTheme}
-        className="fixed top-6 right-6 z-50 p-3 bg-card border border-border rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-        aria-label="Toggle theme"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3, ease: premiumEase }}
-        whileHover={{ scale: 1.1, rotate: 180 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <AnimatePresence mode="wait">
-          {theme === 'light' ? (
-            <motion.div
-              key="moon"
-              initial={{ rotate: -90, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: 90, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Moon size={20} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="sun"
-              initial={{ rotate: 90, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: -90, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Sun size={20} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.button>
 
       {/* Back to Home - Fixed Position */}
       <motion.div

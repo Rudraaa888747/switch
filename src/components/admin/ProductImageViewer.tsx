@@ -30,16 +30,16 @@ export const ProductImageViewer: React.FC<ProductImageViewerProps> = ({ src, alt
         <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-border/50">
           <div className="relative">
             <div className="absolute top-4 right-4 z-50 flex gap-2">
-              <Button size="icon" variant="secondary" onClick={handleZoomOut} disabled={scale <= 0.5} className="bg-white/10 hover:bg-white/20 backdrop-blur-sm">
+              <Button size="icon" variant="secondary" onClick={handleZoomOut} disabled={scale <= 0.5} className="bg-foreground/10 hover:bg-foreground/20 backdrop-blur-sm">
                 <ZoomOut className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="secondary" onClick={handleReset} className="bg-white/10 hover:bg-white/20 backdrop-blur-sm">
+              <Button size="icon" variant="secondary" onClick={handleReset} className="bg-foreground/10 hover:bg-foreground/20 backdrop-blur-sm">
                 <span className="text-xs font-bold">{Math.round(scale * 100)}%</span>
               </Button>
-              <Button size="icon" variant="secondary" onClick={handleZoomIn} disabled={scale >= 3} className="bg-white/10 hover:bg-white/20 backdrop-blur-sm">
+              <Button size="icon" variant="secondary" onClick={handleZoomIn} disabled={scale >= 3} className="bg-foreground/10 hover:bg-foreground/20 backdrop-blur-sm">
                 <ZoomIn className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="secondary" onClick={() => setIsOpen(false)} className="bg-white/10 hover:bg-white/20 backdrop-blur-sm">
+              <Button size="icon" variant="secondary" onClick={() => setIsOpen(false)} className="bg-foreground/10 hover:bg-foreground/20 backdrop-blur-sm">
                 <X className="h-4 w-4" />
               </Button>
             </div>

@@ -2,12 +2,26 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdminClient, isAdminApiAuthorized } from '../../_lib/supabase-admin';
 
 interface ReturnRequestRow {
-  id?: string;
-  user_id?: string;
-  order_id?: string;
+  id: string;
+  order_id: string;
+  user_id: string;
+  status: string;
+  refund_amount: number;
+  created_at: string;
+  updated_at?: string;
+  admin_note?: string;
+}
+
+interface UpdateReturnPayload {
+  id: string;
   status?: string;
   refund_amount?: number;
-  [key: string]: unknown;
+  estimated_refund_date?: string;
+  admin_note?: string;
+  process_wallet_refund?: boolean;
+  wallet_user_id?: string;
+  wallet_reference_id?: string;
+  wallet_description?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -15,74 +29,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  try {
-    const supabaseAdmin = getSupabaseAdminClient();
+  const supabaseAdmin = getSupabaseAdminClient();
 
+  try {
     if (req.method === 'GET') {
-      const { data: returnRequests, error: returnError } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('return_requests')
-        .select('*')
+        .select('*,profiles(display_name),orders(order_number)')
         .order('created_at', { ascending: false });
 
-      if (returnError) {
-        return res.status(500).json({ error: returnError.message, code: returnError.code });
+      if (error) {
+        return res.status(500).json({ error: error.message, code: error.code });
       }
 
-      const requests = (returnRequests || []) as ReturnRequestRow[];
-      const userIds = [...new Set(requests.map((row) => row.user_id).filter(Boolean))];
-      const orderIds = [...new Set(requests.map((row) => row.order_id).filter(Boolean))];
-      const requestIds = [...new Set(requests.map((row) => row.id).filter(Boolean))];
-
-      let profiles: Record<string, unknown>[] = [];
-      if (userIds.length > 0) {
-        const { data: profileRows, error: profileError } = await supabaseAdmin
-          .from('profiles')
-          .select('user_id, display_name')
-          .in('user_id', userIds);
-
-        if (profileError) {
-          return res.status(500).json({ error: profileError.message, code: profileError.code });
-        }
-
-        profiles = (profileRows || []) as Record<string, unknown>[];
-      }
-
-      let orders: Record<string, unknown>[] = [];
-      if (orderIds.length > 0) {
-        const { data: orderRows, error: orderError } = await supabaseAdmin
-          .from('orders')
-          .select('*')
-          .in('id', orderIds);
-
-        if (orderError) {
-          return res.status(500).json({ error: orderError.message, code: orderError.code });
-        }
-
-        orders = (orderRows || []) as Record<string, unknown>[];
-      }
-
-      let items: Record<string, unknown>[] = [];
-      if (requestIds.length > 0) {
-        const { data: itemRows, error: itemError } = await supabaseAdmin
-          .from('return_request_items')
-          .select('*')
-          .in('return_request_id', requestIds);
-
-        if (itemError) {
-          return res.status(500).json({ error: itemError.message, code: itemError.code });
-        }
-
-        items = (itemRows || []) as Record<string, unknown>[];
-      }
-
-      return res.status(200).json({
-        data: {
-          returnRequests: requests,
-          profiles,
-          orders,
-          items,
-        },
-      });
+      return res.status(200).json({ data });
     }
 
     if (req.method === 'POST') {
@@ -102,13 +62,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'id is required' });
       }
 
+      console.log(`[AdminReturns] Updating return ${id} to ${status}`, { refund_amount, process_wallet_refund });
+
       const { data: existingReturn, error: existingReturnError } = await supabaseAdmin
         .from('return_requests')
-        .select('id, user_id, status, refund_amount')
+        .select('id, user_id, status, refund_amount, order_id')
         .eq('id', id)
         .maybeSingle<ReturnRequestRow>();
 
       if (existingReturnError) {
+        console.error(`[AdminReturns] Error fetching existing return:`, existingReturnError);
         return res.status(500).json({ error: existingReturnError.message, code: existingReturnError.code });
       }
 
@@ -126,11 +89,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (admin_note !== undefined) updateData.admin_note = admin_note;
 
       if (process_wallet_refund) {
-        if (!wallet_user_id || refund_amount === undefined) {
-          return res.status(400).json({ error: 'wallet_user_id and refund_amount are required for wallet refunds' });
+        const userId = wallet_user_id || existingReturn.user_id;
+        const amount = refund_amount !== undefined ? refund_amount : (existingReturn.refund_amount || 0);
+
+        if (!userId || amount === undefined || Number(amount) <= 0) {
+          return res.status(400).json({ error: 'Valid user_id and positive refund_amount are required for wallet refunds' });
         }
 
-        const walletReferenceId = wallet_reference_id ?? String(id);
+        const walletReferenceId = wallet_reference_id || `REFUND-${String(id).slice(0, 8)}`;
+        
+        console.log(`[AdminReturns] Checking wallet transactions for reference ${walletReferenceId}`);
         const { data: existingWalletCredit, error: existingWalletCreditError } = await supabaseAdmin
           .from('wallet_transactions')
           .select('id')
@@ -140,24 +108,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .limit(1);
 
         if (existingWalletCreditError) {
+          console.error(`[AdminReturns] Wallet check error:`, existingWalletCreditError);
           return res.status(500).json({ error: existingWalletCreditError.message, code: existingWalletCreditError.code });
         }
 
         if (!existingWalletCredit || existingWalletCredit.length === 0) {
+          console.log(`[AdminReturns] Calling add_wallet_credit RPC for user ${userId}, amount ${amount}`);
           const { error: walletError } = await supabaseAdmin.rpc('add_wallet_credit', {
-            p_user_id: wallet_user_id,
-            p_amount: refund_amount,
+            p_user_id: userId,
+            p_amount: amount,
             p_source: 'refund',
             p_reference_id: walletReferenceId,
             p_description: wallet_description ?? `Refund for return request #${String(id).slice(0, 8)}`,
           });
 
           if (walletError) {
+            console.error(`[AdminReturns] Wallet RPC error:`, walletError);
             return res.status(500).json({ error: walletError.message, code: walletError.code });
           }
+          console.log(`[AdminReturns] Wallet refund successful`);
+          updateData.status = 'refunded';
+        } else {
+          console.log(`[AdminReturns] Wallet refund already exists for reference ${walletReferenceId}`);
         }
       }
 
+      console.log(`[AdminReturns] Executing update on return_requests for ID ${id}`);
       const { data, error } = await supabaseAdmin
         .from('return_requests')
         .update(updateData)
@@ -165,6 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('*');
 
       if (error) {
+        console.error(`[AdminReturns] Update error:`, error);
         return res.status(500).json({ error: error.message, code: error.code });
       }
 
@@ -172,14 +149,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Return request not found or not updated' });
       }
 
+      const updatedReturn = data[0] as ReturnRequestRow;
+      const prevStatus = String(existingReturn.status || '').toLowerCase();
+      const nextStatus = String(updatedReturn.status || status || '').toLowerCase();
+
+      if (prevStatus !== nextStatus) {
+        const displayStatus = nextStatus.replace(/_/g, ' ');
+        console.log(`[AdminReturns] Creating notification for status transition to ${displayStatus}`);
+        
+        await supabaseAdmin
+          .from('admin_notifications')
+          .insert({
+            title: 'Return request updated',
+            message: `Return ${String(id).slice(0, 8)} moved to ${displayStatus}.`,
+            type: ['rejected', 'cancelled'].includes(nextStatus) ? 'warning' : 'info',
+            event_type: 'return_request',
+            link: '/admin/returns',
+            metadata: {
+              returnId: id,
+              orderId: existingReturn.order_id ?? null,
+              previousStatus: prevStatus,
+              status: nextStatus,
+            },
+          })
+          .then(() => console.log(`[AdminReturns] Notification inserted`))
+          .catch((err) => console.error(`[AdminReturns] Notification error:`, err));
+      }
+
+      const refundTriggered =
+        (refund_amount !== undefined && Number(refund_amount) > 0 && prevStatus !== 'refunded') ||
+        nextStatus === 'refunded';
+
+      if (refundTriggered) {
+        await supabaseAdmin
+          .from('admin_notifications')
+          .insert({
+            title: 'Refund processed',
+            message: `Refund updated for return ${String(id).slice(0, 8)}.`,
+            type: 'success',
+            event_type: 'refund',
+            link: '/admin/returns',
+            metadata: {
+              returnId: id,
+              orderId: existingReturn.order_id ?? null,
+              refundAmount: Number(refund_amount ?? updatedReturn.refund_amount ?? 0),
+              status: nextStatus,
+            },
+          })
+          .then(() => console.log(`[AdminReturns] Refund notification inserted`))
+          .catch((err) => console.error(`[AdminReturns] Refund notification error:`, err));
+      }
+
       return res.status(200).json({ data });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error: unknown) {
+    console.error(`[AdminReturns] Unhandled exception:`, error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Admin returns request failed',
     });
   }
 }
-

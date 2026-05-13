@@ -14,7 +14,7 @@ interface CouponData {
 interface CouponInputProps {
   subtotal: number;
   onApplyCoupon: (discount: number, couponData: CouponData | null) => void;
-  isAuthenticated: boolean;
+  isAuthenticated?: boolean;
 }
 
 // Confetti particle component
@@ -60,31 +60,6 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
   const handleApply = async () => {
     if (!code.trim()) {
       setError('Please enter a promo code');
-      return;
-    }
-
-    // Special "OFF" code - 50% discount without authentication requirement
-    if (code.toUpperCase().trim() === 'OFF') {
-      setIsLoading(true);
-
-      // Simulate brief loading for effect
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const specialCoupon: CouponData = {
-        code: 'OFF',
-        discount_type: 'percentage',
-        discount_value: 50,
-        min_order_amount: 0,
-      };
-
-      const discount = calculateDiscount(specialCoupon);
-      setAppliedCoupon(specialCoupon);
-      onApplyCoupon(discount, specialCoupon);
-      setShowCelebration(true);
-      setIsLoading(false);
-
-      // Hide celebration after animation
-      setTimeout(() => setShowCelebration(false), 4000);
       return;
     }
 
@@ -169,6 +144,8 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
       const discount = calculateDiscount(couponData);
       setAppliedCoupon(couponData);
       onApplyCoupon(discount, couponData);
+      setShowCelebration(true);
+      window.setTimeout(() => setShowCelebration(false), 3000);
 
       toast({
         title: 'Promo code applied!',
@@ -298,10 +275,7 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`flex items-center justify-between p-3 border rounded-lg ${appliedCoupon.code === 'OFF'
-                  ? 'bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 border-primary/50'
-                  : 'bg-primary/10 border-primary/30'
-                }`}
+              className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 p-3"
             >
               <div className="flex items-center gap-2">
                 <motion.div
@@ -309,11 +283,7 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', stiffness: 500 }}
                 >
-                  {appliedCoupon.code === 'OFF' ? (
-                    <Sparkles className="w-5 h-5 text-primary" />
-                  ) : (
-                    <Check className="w-5 h-5 text-primary" />
-                  )}
+                  <Check className="w-5 h-5 text-primary" />
                 </motion.div>
                 <div>
                   <p className="font-medium text-sm">{appliedCoupon.code}</p>

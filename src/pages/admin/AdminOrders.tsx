@@ -25,6 +25,29 @@ const DEFAULT_PRODUCT_IMAGE = '/placeholder.svg';
 const PAGE_SIZE = 20;
 const statusOptions = ['Order Placed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled'];
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
+};
+
+const rowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.25 } },
+};
+
+const cardHover = {
+  rest: { scale: 1 },
+  hover: { scale: 1.02, transition: { duration: 0.2 } },
+};
+
 interface UpdateOrderResponse {
   data?: Record<string, unknown>[];
   error?: string;
@@ -112,38 +135,38 @@ const formatOrderDate = (dateValue?: string | null) => {
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'Delivered':
-      return <CheckCircle className="w-4 h-4 text-green-500" />;
+      return <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400" />;
     case 'Shipped':
-      return <Truck className="w-4 h-4 text-blue-500" />;
+      return <Truck className="w-4 h-4 text-blue-500 dark:text-blue-400" />;
     case 'Out for Delivery':
-      return <Truck className="w-4 h-4 text-orange-500" />;
+      return <Truck className="w-4 h-4 text-orange-500 dark:text-orange-400" />;
     case 'Processing':
-      return <Package className="w-4 h-4 text-yellow-500" />;
+      return <Package className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />;
     case 'Order Placed':
-      return <Clock className="w-4 h-4 text-gray-500" />;
+      return <Clock className="w-4 h-4 text-muted-foreground" />;
     case 'Cancelled':
-      return <XCircle className="w-4 h-4 text-red-500" />;
+      return <XCircle className="w-4 h-4 text-red-500 dark:text-red-400" />;
     default:
-      return <Clock className="w-4 h-4" />;
+      return <Clock className="w-4 h-4 text-muted-foreground" />;
   }
 };
 
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'Delivered':
-      return 'bg-green-100 text-green-800';
+      return 'bg-green-500/10 text-green-600 dark:text-green-400 border-transparent';
     case 'Shipped':
-      return 'bg-blue-100 text-blue-800';
+      return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-transparent';
     case 'Out for Delivery':
-      return 'bg-orange-100 text-orange-800';
+      return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-transparent';
     case 'Processing':
-      return 'bg-yellow-100 text-yellow-800';
+      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-transparent';
     case 'Order Placed':
-      return 'bg-gray-100 text-gray-800';
+      return 'bg-muted text-muted-foreground border-transparent';
     case 'Cancelled':
-      return 'bg-red-100 text-red-800';
+      return 'bg-red-500/10 text-red-600 dark:text-red-400 border-transparent';
     default:
-      return 'bg-gray-100 text-gray-800';
+      return 'bg-muted text-muted-foreground border-transparent';
   }
 };
 
@@ -323,30 +346,41 @@ const AdminOrders = () => {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
           className="grid grid-cols-2 lg:grid-cols-4 gap-4"
         >
           {[
             { label: 'Total Orders', value: orderStats.total, color: 'bg-primary/10 text-primary' },
-            { label: 'Pending', value: orderStats.pending, color: 'bg-yellow-500/10 text-yellow-600' },
-            { label: 'Shipped', value: orderStats.shipped, color: 'bg-blue-500/10 text-blue-600' },
-            { label: 'Delivered', value: orderStats.delivered, color: 'bg-green-500/10 text-green-600' },
+            { label: 'Pending', value: orderStats.pending, color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' },
+            { label: 'Shipped', value: orderStats.shipped, color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+            { label: 'Delivered', value: orderStats.delivered, color: 'bg-green-500/10 text-green-600 dark:text-green-400' },
           ].map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                  </div>
-                  <div className={`p-2 rounded-lg ${stat.color}`}>
-                    <Package className="w-5 h-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <motion.div key={stat.label} variants={itemVariants} whileHover="hover" initial="rest">
+              <motion.div variants={cardHover}>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">{stat.label}</p>
+                        <motion.p
+                          className="text-2xl font-bold"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.4, delay: 0.2 }}
+                        >
+                          {stat.value}
+                        </motion.p>
+                      </div>
+                      <div className={`p-2 rounded-lg ${stat.color}`}>
+                        <Package className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
           ))}
         </motion.div>
 
@@ -394,7 +428,7 @@ const AdminOrders = () => {
               {isLoading ? (
                 <div className="space-y-4">
                   {[...Array(5)].map((_, index) => (
-                    <div key={index} className="h-16 bg-gray-100 rounded animate-pulse" />
+                    <div key={index} className="h-16 bg-muted rounded animate-pulse" />
                   ))}
                 </div>
               ) : orders.length === 0 ? (
@@ -403,6 +437,7 @@ const AdminOrders = () => {
                 </div>
               ) : (
                 <>
+                  <div className="admin-table-responsive overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -417,17 +452,25 @@ const AdminOrders = () => {
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <motion.tbody
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
                       {orders.map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-mono text-sm">{order.order_id || order.id}</TableCell>
-                          <TableCell>
+                        <motion.tr
+                          key={order.id}
+                          variants={rowVariants}
+                          className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                        >
+                          <TableCell data-label="Order ID" className="font-mono text-sm">{order.order_id || order.id}</TableCell>
+                          <TableCell data-label="Customer">
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4" />
                               {order.customer_name || 'Unknown'}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell data-label="Items">
                             <div className="flex items-center gap-3">
                               <img
                                 src={getOrderImageUrl(order)}
@@ -445,10 +488,10 @@ const AdminOrders = () => {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>{order.total_quantity}</TableCell>
-                          <TableCell>{formatPrice(order.grand_total)}</TableCell>
-                          <TableCell>{formatOrderDate(order.order_date)}</TableCell>
-                          <TableCell>
+                          <TableCell data-label="Qty">{order.total_quantity}</TableCell>
+                          <TableCell data-label="Total">{formatPrice(order.grand_total)}</TableCell>
+                          <TableCell data-label="Date">{formatOrderDate(order.order_date)}</TableCell>
+                          <TableCell data-label="Status">
                             <Badge className={cn(getStatusColor(order.status))}>
                               <div className="flex items-center gap-1">
                                 {getStatusIcon(order.status)}
@@ -456,8 +499,8 @@ const AdminOrders = () => {
                               </div>
                             </Badge>
                           </TableCell>
-                          <TableCell>{order.estimated_delivery_date ? formatOrderDate(order.estimated_delivery_date) : 'Not set'}</TableCell>
-                          <TableCell>
+                          <TableCell data-label="Delivery">{order.estimated_delivery_date ? formatOrderDate(order.estimated_delivery_date) : 'Not set'}</TableCell>
+                          <TableCell data-label="Actions" className="actions-cell">
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button variant="outline" size="sm">
@@ -465,19 +508,24 @@ const AdminOrders = () => {
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                                <DialogHeader className="border-b pb-4">
-                                  <div className="flex items-center justify-between">
-                                    <DialogTitle className="text-xl font-bold">Order Details</DialogTitle>
-                                    <Badge className={cn("px-3 py-1", getStatusColor(order.status))}>
-                                      <div className="flex items-center gap-1.5">
-                                        {getStatusIcon(order.status)}
-                                        <span className="font-semibold">{order.status}</span>
-                                      </div>
-                                    </Badge>
-                                  </div>
-                                </DialogHeader>
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  <DialogHeader className="border-b pb-4">
+                                    <div className="flex items-center justify-between">
+                                      <DialogTitle className="text-xl font-bold">Order Details</DialogTitle>
+                                      <Badge className={cn("px-3 py-1", getStatusColor(order.status))}>
+                                        <div className="flex items-center gap-1.5">
+                                          {getStatusIcon(order.status)}
+                                          <span className="font-semibold">{order.status}</span>
+                                        </div>
+                                      </Badge>
+                                    </div>
+                                  </DialogHeader>
 
-                                <div className="space-y-8 py-4">
+                                  <div className="space-y-8 py-4">
                                   {/* Info Grid */}
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/30 p-4 rounded-xl border border-border/50">
                                     <div className="space-y-4">
@@ -525,18 +573,28 @@ const AdminOrders = () => {
                                     <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                       Items <Badge variant="secondary" className="rounded-full px-2 py-0 h-5 text-[10px]">{order.items.length}</Badge>
                                     </h3>
-                                    <div className="space-y-3">
+                                    <motion.div
+                                      variants={containerVariants}
+                                      initial="hidden"
+                                      animate="visible"
+                                      className="space-y-3"
+                                    >
                                       {order.items.map((item) => {
                                         const product = products.find(p => p.id === item.product_id);
-                                        const imageUrl = item.product_image 
-                                          ? normalizeImageUrl(item.product_image) 
+                                        const imageUrl = item.product_image
+                                          ? normalizeImageUrl(item.product_image)
                                           : (product ? getProductImage(product) : DEFAULT_PRODUCT_IMAGE);
 
                                         return (
-                                          <div key={item.id} className="flex items-center gap-4 group p-3 rounded-xl border border-border/40 hover:border-primary/20 transition-all hover:bg-muted/30">
+                                          <motion.div
+                                            key={item.id}
+                                            variants={itemVariants}
+                                            whileHover={{ scale: 1.01, transition: { duration: 0.15 } }}
+                                            className="flex items-center gap-4 group p-3 rounded-xl border border-border/40 hover:border-primary/20 transition-all hover:bg-muted/30"
+                                          >
                                             <div className="relative w-16 h-20 flex-shrink-0 overflow-hidden rounded-lg border bg-muted">
-                                              <img 
-                                                src={imageUrl} 
+                                              <img
+                                                src={imageUrl}
                                                 alt={item.product_name}
                                                 className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                                 onError={(e) => { e.currentTarget.src = DEFAULT_PRODUCT_IMAGE; }}
@@ -552,10 +610,10 @@ const AdminOrders = () => {
                                               <p className="font-bold text-sm">{formatPrice(item.total_price)}</p>
                                               <p className="text-[10px] text-muted-foreground">{formatPrice(item.total_price / item.quantity)} each</p>
                                             </div>
-                                          </div>
+                                          </motion.div>
                                         );
                                       })}
-                                    </div>
+                                    </motion.div>
                                   </div>
 
                                   {/* Calculation Summary */}
@@ -563,7 +621,7 @@ const AdminOrders = () => {
                                     <div className="w-full max-w-[240px] space-y-2">
                                       <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Discount Applied</span>
-                                        <span className="text-green-600 font-medium">-{formatPrice(order.discount_applied || 0)}</span>
+                                        <span className="text-green-600 dark:text-green-400 font-medium">-{formatPrice(order.discount_applied || 0)}</span>
                                       </div>
                                       <div className="flex justify-between items-center pt-2 border-t">
                                         <span className="text-base font-semibold">Grand Total</span>
@@ -611,13 +669,15 @@ const AdminOrders = () => {
                                     </div>
                                   </div>
                                 </div>
+                              </motion.div>
                               </DialogContent>
                             </Dialog>
                           </TableCell>
-                        </TableRow>
+                        </motion.tr>
                       ))}
-                    </TableBody>
+                    </motion.tbody>
                   </Table>
+                  </div>
 
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-muted-foreground">

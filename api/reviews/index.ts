@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdminClient } from '../_lib/supabase-admin';
+import { getReviewDisplayName } from '../../src/lib/utils';
 
 interface ReviewRow {
   id: string;
@@ -49,7 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       data: {
-        reviews: safeReviews,
+        reviews: safeReviews.map((review, index) => ({
+          ...review,
+          author_name: getReviewDisplayName(review.user_id, index),
+        })),
         summary: {
           average,
           count,

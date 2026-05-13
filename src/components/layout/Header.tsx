@@ -1,39 +1,64 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, type Easing } from 'framer-motion';
-import { 
-  Menu, 
-  X, 
-  ShoppingBag, 
-  Search, 
-  Sun,
-  Moon,
-  User,
-  ArrowRight,
-  Heart
-} from 'lucide-react';
-import { useTheme } from '@/contexts/ThemeContext';
+import { Menu, X, ShoppingBag, Search, User, ArrowRight, Heart } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useSearch } from '@/hooks/useSearch';
 import { formatPrice } from '@/data/products';
 import { getProductImage } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { createPortal } from 'react-dom';
 
-// Premium easing curve
-const premiumEase: Easing = [0.4, 0, 0.2, 1];
+const premiumEase: Easing = [0.22, 1, 0.36, 1];
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const { theme, toggleTheme } = useTheme();
-  const { totalItems: cartItems } = useCart();
+  const { totalItems: cartItems, openDrawer } = useCart();
   const { totalItems: wishlistItems } = useWishlist();
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mobileMenuScrollRef = useRef<HTMLDivElement>(null);
   const { query, setQuery, results, isSearching } = useSearch();
+  const isMobile = useIsMobile();
+  const [scrolled, setScrolled] = useState(false);
+  const isHome = location.pathname === '/';
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setIsSearchOpen(false);
+    setQuery('');
+  }, [location.pathname, setQuery]);
+
+  useEffect(() => {
+    if (isSearchOpen) {
+      const timeout = window.setTimeout(() => searchInputRef.current?.focus(), 120);
+      return () => window.clearTimeout(timeout);
+    }
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    document.body.dataset.mobileMenu = isMenuOpen ? 'open' : 'closed';
+
+    if (isMenuOpen) {
+      mobileMenuScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    }
+
+    return () => {
+      document.body.dataset.mobileMenu = 'closed';
+    };
+  }, [isMenuOpen]);
 
   const navLinks = [
     { name: 'New Arrivals', path: '/shop?filter=new' },
@@ -46,6 +71,7 @@ const Header = () => {
   const secondaryLinks = [
     { name: 'Accessories', path: '/shop?subcategory=accessories' },
     { name: 'AI Assistant', path: '/ai-assistant' },
+    { name: 'Wishlist', path: '/wishlist' },
     { name: 'Admin', path: '/admin/dashboard' },
   ];
 
@@ -54,21 +80,16 @@ const Header = () => {
     return location.pathname.startsWith(path.split('?')[0]);
   };
 
-  const handleSearchToggle = () => {
-    setIsSearchOpen(!isSearchOpen);
-    if (!isSearchOpen) {
-      setQuery('');
-      setTimeout(() => searchInputRef.current?.focus(), 100);
-    }
-  };
+  const headerClass = isHome && !scrolled
+    ? 'bg-transparent border-transparent text-white'
+    : 'theme-header-shell text-foreground';
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(query.trim())}`);
-      setIsSearchOpen(false);
-      setQuery('');
-    }
+    if (!query.trim()) return;
+    navigate(`/shop?search=${encodeURIComponent(query.trim())}`);
+    setIsSearchOpen(false);
+    setQuery('');
   };
 
   const handleProductClick = () => {
@@ -76,198 +97,159 @@ const Header = () => {
     setQuery('');
   };
 
-  // Close search on route change
-  useEffect(() => {
-    setIsSearchOpen(false);
-    setQuery('');
-  }, [location.pathname, setQuery]);
-
   return (
-    <motion.header 
-      className="fixed top-0 left-0 right-0 z-50 glass"
-      initial={{ opacity: 0, y: -20 }}
+    <motion.header
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${headerClass}`}
+      initial={{ opacity: 0, y: -18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: premiumEase }}
     >
-      <div className="container-custom">
-        {/* Top Row - Logo centered, actions on right */}
-        <div className="flex items-center justify-between h-16 md:h-20">
-          {/* Mobile Menu Button */}
-          <motion.button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 transition-opacity"
-            aria-label="Toggle menu"
-            whileHover={{ scale: 1.05, opacity: 1 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </motion.button>
-
-          {/* Spacer for mobile */}
-          <div className="md:hidden" />
-
-          {/* Centered Logo */}
-          <Link to="/" className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:flex-1 md:flex md:justify-center">
-            <motion.span 
-              className="text-2xl md:text-3xl font-light tracking-[0.3em] uppercase text-foreground"
-              whileHover={{ opacity: 0.7 }}
-              transition={{ duration: 0.3 }}
-            >
-              SWITCH
-            </motion.span>
-          </Link>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-1 md:gap-3">
-            {/* User Profile */}
-            <motion.div
-              whileHover={{ scale: 1.05, opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0.8 }}
-            >
-              <Link
-                to={isAuthenticated ? "/profile" : "/auth"}
-                className="p-2 inline-block"
-                aria-label="Profile"
+      <div className="safe-top relative z-10">
+        <div className="container-custom">
+          <div className="flex h-[var(--mobile-header-height)] items-center justify-between gap-2 md:h-20">
+            <div className="flex min-w-[4.5rem] items-center gap-1 md:min-w-0 md:gap-2">
+              <motion.button
+                onClick={() => setIsMenuOpen((value) => !value)}
+                className={`touch-target rounded-full border md:hidden ${
+                  isHome && !scrolled ? 'border-white/15 bg-black/18 text-white backdrop-blur-md' : 'border-border/60 bg-background/72 text-foreground'
+                }`}
+                aria-label="Toggle menu"
+                whileTap={{ scale: 0.92 }}
               >
-                <User size={18} />
-              </Link>
-            </motion.div>
+                {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </motion.button>
 
-            {/* Wishlist */}
-            <motion.div
-              whileHover={{ scale: 1.05, opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0.8 }}
-              className="relative"
-            >
-              <Link
-                to="/wishlist"
-                className="p-2 inline-block"
-                aria-label="Wishlist"
+              {!isMobile && <div className="w-6" aria-hidden="true" />}
+            </div>
+
+            <Link to="/" className="absolute left-1/2 max-w-[52vw] -translate-x-1/2 md:static md:max-w-none md:translate-x-0 md:flex-1 md:flex md:justify-center">
+              <motion.span
+                className={`block truncate text-center text-[0.92rem] font-light uppercase tracking-[0.28em] sm:text-[1rem] md:text-3xl md:tracking-[0.34em] ${isHome && !scrolled ? 'text-white' : 'text-foreground'}`}
+                whileHover={{ opacity: 0.7 }}
               >
-                <Heart size={18} />
-                {wishlistItems > 0 && (
-                  <motion.span 
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-foreground text-background text-[10px] font-medium flex items-center justify-center"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  >
-                    {wishlistItems}
-                  </motion.span>
-                )}
-              </Link>
-            </motion.div>
+                SWITCH
+              </motion.span>
+            </Link>
 
-            {/* Theme Toggle */}
-            <motion.button
-              onClick={toggleTheme}
-              className="p-2"
-              aria-label="Toggle theme"
-              whileHover={{ scale: 1.05, opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0.8 }}
-            >
-              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-            </motion.button>
+            <div className="flex min-w-[4.5rem] items-center justify-end gap-0.5 md:min-w-0 md:gap-3">
+              {!isMobile && (
+                <>
+                  <motion.div whileHover={{ scale: 1.05, opacity: 1 }} whileTap={{ scale: 0.95 }} initial={{ opacity: 0.84 }}>
+                    <Link to={isAuthenticated ? '/profile' : '/auth'} className="touch-target rounded-full" aria-label="Profile">
+                      <User size={18} />
+                    </Link>
+                  </motion.div>
 
-            {/* Cart */}
-            <motion.div
-              whileHover={{ scale: 1.05, opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0.8 }}
-              className="relative"
-            >
-              <Link
-                to={isAuthenticated ? "/cart" : "/auth"}
-                className="p-2 inline-block"
+                  <motion.div whileHover={{ scale: 1.05, opacity: 1 }} whileTap={{ scale: 0.95 }} initial={{ opacity: 0.84 }} className="relative">
+                    <Link to="/wishlist" className="touch-target rounded-full" aria-label="Wishlist">
+                      <Heart size={18} />
+                      {wishlistItems > 0 && (
+                        <motion.span
+                          className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        >
+                          {wishlistItems}
+                        </motion.span>
+                      )}
+                    </Link>
+                  </motion.div>
+                </>
+              )}
+
+              {isMobile && (
+                <motion.button
+                  onClick={() => setIsSearchOpen((value) => !value)}
+                  className={`touch-target rounded-full border ${
+                    isHome && !scrolled ? 'border-white/15 bg-black/18 text-white' : 'border-border/60 bg-background/72 text-foreground'
+                  }`}
+                  aria-label="Search"
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <Search size={18} />
+                </motion.button>
+              )}
+
+              <motion.button
+                onClick={openDrawer}
+                className={`relative touch-target rounded-full border ${
+                  isHome && !scrolled ? 'border-white/15 bg-black/18 text-white' : 'border-border/60 bg-background/72 text-foreground'
+                }`}
                 aria-label="Cart"
+                whileHover={{ scale: 1.05, opacity: 1 }}
+                whileTap={{ scale: 0.92 }}
+                initial={{ opacity: 0.9 }}
               >
                 <ShoppingBag size={18} />
                 {cartItems > 0 && (
-                  <motion.span 
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-foreground text-background text-[10px] font-medium flex items-center justify-center"
+                  <motion.span
+                    className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background"
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                   >
                     {cartItems}
                   </motion.span>
                 )}
-              </Link>
-            </motion.div>
+              </motion.button>
 
-            {/* Search */}
-            <motion.button
-              onClick={handleSearchToggle}
-              className="p-2"
-              aria-label="Search"
-              whileHover={{ scale: 1.05, opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0.8 }}
-            >
-              <Search size={18} />
-            </motion.button>
+              {!isMobile && (
+                <motion.button
+                  onClick={() => setIsSearchOpen((value) => !value)}
+                  className="touch-target rounded-full"
+                  aria-label="Search"
+                  whileHover={{ scale: 1.05, opacity: 1 }}
+                  whileTap={{ scale: 0.95 }}
+                  initial={{ opacity: 0.84 }}
+                >
+                  <Search size={18} />
+                </motion.button>
+              )}
+            </div>
           </div>
+
+          <nav className="hidden items-center justify-center gap-10 pb-4 md:flex">
+            {navLinks.map((link, index) => (
+              <motion.div key={link.name} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.05, duration: 0.4, ease: premiumEase }}>
+                <Link to={link.path} className={`nav-link ${isActive(link.path) ? 'nav-link-active' : ''}`}>
+                  {link.name}
+                </Link>
+              </motion.div>
+            ))}
+          </nav>
         </div>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center justify-center gap-10 pb-4">
-          {navLinks.map((link, index) => (
-            <motion.div
-              key={link.name}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + index * 0.05, duration: 0.4, ease: premiumEase }}
-            >
-              <Link
-                to={link.path}
-                className={`nav-link ${isActive(link.path) ? 'nav-link-active' : ''}`}
-              >
-                {link.name}
-              </Link>
-            </motion.div>
-          ))}
-        </nav>
-
-        {/* Search Bar with Live Results */}
         <AnimatePresence>
           {isSearchOpen && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.4, ease: premiumEase }}
-              className="overflow-hidden border-t border-border"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.35, ease: premiumEase }}
+              className="overflow-hidden border-t border-border/60"
             >
-              <div className="py-4">
+              <div className="container-custom py-3 md:py-4">
                 <form onSubmit={handleSearchSubmit} className="relative">
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                     <input
                       ref={searchInputRef}
                       type="text"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search products, categories, colors..."
-                      className="input-premium text-sm pl-11 pr-4"
+                      placeholder={isMobile ? 'Search collection' : 'Search products, categories, colors...'}
+                      className="input-premium h-12 pl-11 pr-11 text-sm"
                       autoFocus
                     />
                     {query && (
-                      <motion.button
-                        type="button"
-                        onClick={() => setQuery('')}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
-                        whileHover={{ opacity: 0.6 }}
-                      >
+                      <motion.button type="button" onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5" whileTap={{ scale: 0.9 }}>
                         <X size={16} />
                       </motion.button>
                     )}
                   </div>
                 </form>
 
-                {/* Live Search Results */}
                 <AnimatePresence>
                   {isSearching && (
                     <motion.div
@@ -275,37 +257,29 @@ const Header = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.3, ease: premiumEase }}
-                      className="mt-4 max-h-[60vh] overflow-y-auto"
+                      className="mt-4 max-h-[56vh] overflow-y-auto md:max-h-[60vh]"
                     >
                       {results.length > 0 ? (
                         <>
-                          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">
+                          <p className="mb-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
                             {results.length} result{results.length !== 1 ? 's' : ''} found
                           </p>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                             {results.slice(0, 8).map((product, index) => (
-                              <motion.div
-                                key={product.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.05, duration: 0.3 }}
-                              >
-                                <Link
-                                  to={`/product/${product.id}`}
-                                  onClick={handleProductClick}
-                                  className="group block bg-card border border-border hover:border-foreground/30 transition-all duration-300 hover:shadow-md"
-                                >
-                                  <div className="aspect-square overflow-hidden">
+                              <motion.div key={product.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05, duration: 0.3 }}>
+                                <Link to={`/product/${product.id}`} onClick={handleProductClick} className="group block overflow-hidden rounded-[1.15rem] border border-border bg-card shadow-sm transition-all duration-300 hover:border-foreground/20">
+                                  <div className="aspect-[3/4] overflow-hidden">
                                     <img
                                       src={getProductImage(product)}
                                       alt={product.name}
-                                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                      loading="lazy"
                                     />
                                   </div>
-                                  <div className="p-3">
-                                    <h4 className="text-xs font-medium line-clamp-1">{product.name}</h4>
-                                    <p className="text-xs text-muted-foreground capitalize">{product.category}</p>
-                                    <p className="text-sm font-medium mt-1">{formatPrice(product.price)}</p>
+                                  <div className="space-y-1 p-3">
+                                    <h4 className="line-clamp-1 text-xs font-medium">{product.name}</h4>
+                                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{product.category}</p>
+                                    <p className="text-sm font-medium">{formatPrice(product.price)}</p>
                                   </div>
                                 </Link>
                               </motion.div>
@@ -313,25 +287,19 @@ const Header = () => {
                           </div>
                           {results.length > 8 && (
                             <motion.button
-                              onClick={handleSearchSubmit}
-                              className="w-full mt-4 py-3 text-center text-sm font-medium hover:bg-muted transition-colors duration-300 flex items-center justify-center gap-2 group"
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
+                              onClick={(e) => handleSearchSubmit(e as unknown as React.FormEvent)}
+                              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-3 text-sm font-medium"
+                              whileTap={{ scale: 0.98 }}
                             >
                               View all {results.length} results
-                              <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+                              <ArrowRight size={14} />
                             </motion.button>
                           )}
                         </>
                       ) : (
-                        <motion.div 
-                          className="text-center py-8"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.2 }}
-                        >
-                          <p className="text-muted-foreground">No products found for "{query}"</p>
-                          <p className="text-xs text-muted-foreground mt-1">Try searching for colors, categories, or occasions</p>
+                        <motion.div className="py-8 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                          <p className="text-sm text-muted-foreground">No products found for "{query}"</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Try searching by color, category, or occasion.</p>
                         </motion.div>
                       )}
                     </motion.div>
@@ -343,69 +311,76 @@ const Header = () => {
         </AnimatePresence>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMenuOpen && (
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {isMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: premiumEase }}
-            className="md:hidden absolute top-full left-0 right-0 bg-background border-b border-border"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: premiumEase }}
+            className="fixed inset-0 z-[60] md:hidden"
           >
-            <nav className="container-custom py-8 flex flex-col gap-6">
-              {navLinks.map((link, index) => (
-                <motion.div
-                  key={link.name}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05, duration: 0.3 }}
-                >
-                  <Link
-                    to={link.path}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`text-sm uppercase tracking-widest font-medium transition-opacity duration-300 ${
-                      isActive(link.path) 
-                        ? 'opacity-100' 
-                        : 'opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    {link.name}
-                  </Link>
-                </motion.div>
-              ))}
-              <motion.div 
-                className="border-t border-border pt-6 mt-2"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">More</p>
-                {secondaryLinks.map((link, index) => (
-                  <motion.div
-                    key={link.name}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.35 + index * 0.05, duration: 0.3 }}
-                  >
+            <div className="absolute inset-0 bg-black/52 backdrop-blur-xl" onClick={() => setIsMenuOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -24 }}
+              transition={{ duration: 0.35, ease: premiumEase }}
+              className="mobile-blur-shell relative flex h-[100dvh] flex-col overflow-hidden overscroll-contain"
+            >
+              <div className="safe-top flex items-center justify-between border-b border-border/40 px-4 py-3.5">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Navigate</p>
+                  <p className="mt-1 text-base font-medium tracking-[0.08em]">SWITCH</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setIsMenuOpen(false)} className="touch-target flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-background/70" aria-label="Close menu">
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <nav ref={mobileMenuScrollRef} className="custom-scrollbar flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-4">
+                {[...navLinks, ...secondaryLinks].map((link, index) => (
+                  <motion.div key={link.name} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.035, duration: 0.25, ease: premiumEase }}>
                     <Link
                       to={link.path}
                       onClick={() => setIsMenuOpen(false)}
-                      className={`block py-2 text-sm uppercase tracking-widest font-medium transition-opacity duration-300 ${
-                        isActive(link.path) 
-                          ? 'opacity-100' 
-                          : 'opacity-60 hover:opacity-100'
+                      className={`theme-surface flex items-center justify-between rounded-[1.35rem] px-4 py-4 text-sm uppercase tracking-[0.2em] transition-all duration-300 ${
+                        isActive(link.path) ? 'border-foreground/60 bg-foreground text-background shadow-[0_28px_60px_-42px_hsl(var(--foreground)/0.85)]' : 'text-foreground/86 hover:border-foreground/20 hover:bg-muted/45 hover:text-foreground'
                       }`}
                     >
-                      {link.name}
+                      <span>{link.name}</span>
+                      <ArrowRight size={14} className="opacity-25" />
                     </Link>
                   </motion.div>
                 ))}
-              </motion.div>
-            </nav>
+              </nav>
+
+              <div className="border-t border-border/40 px-3 pb-safe pt-3">
+                <div className="flex gap-2.5">
+                  <Link
+                    to={isAuthenticated ? '/profile' : '/auth'}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-border/50 bg-background/78 px-4 py-3.5 text-xs uppercase tracking-[0.2em] transition-all hover:border-foreground/30"
+                  >
+                    <User size={14} />
+                    Account
+                  </Link>
+                  <button onClick={openDrawer} className="btn-primary flex flex-1 items-center justify-center gap-2 px-4 py-3.5 text-xs">
+                    <ShoppingBag size={14} />
+                    Cart {cartItems > 0 ? `(${cartItems})` : ''}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </motion.header>
   );
 };

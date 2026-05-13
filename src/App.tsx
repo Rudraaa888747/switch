@@ -10,7 +10,11 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import { AdminProvider } from "@/contexts/AdminContext";
 
+import Layout from "./components/layout/Layout";
+import ScrollToTop from "./components/layout/ScrollToTop";
 import FloatingChatWidget from "./components/chat/FloatingChatWidget";
+import CartDrawer from "./components/cart/CartDrawer";
+import { PageSkeleton } from "./components/ui/PageSkeleton";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -41,6 +45,10 @@ const AdminReviews = lazy(() => import("./pages/admin/AdminReviews"));
 const AdminInventory = lazy(() => import("./pages/admin/AdminInventory"));
 const AdminAnalytics = lazy(() => import("./pages/admin/AdminAnalytics"));
 const AdminReturns = lazy(() => import("./pages/admin/AdminReturns"));
+const AdminMarketing = lazy(() => import("./pages/admin/AdminMarketing"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,33 +75,31 @@ const App = () => (
                 <Toaster />
                 <Sonner />
                 <BrowserRouter>
-                  <Suspense fallback={
-                    <div className="flex h-screen items-center justify-center">
-                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  }>
+                  <ScrollToTop />
+                  <Suspense fallback={<PageSkeleton />}>
                     <Routes>
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/forgot-password" element={<ForgotPassword />} />
-                      <Route path="/" element={<Home />} />
-                      <Route path="/about" element={<About />} />
-                      <Route path="/shop" element={<Shop />} />
-                      <Route path="/men" element={<Men />} />
-                      <Route path="/women" element={<Women />} />
-                      <Route path="/product/:id" element={<ProductDetail />} />
-                      <Route path="/ai-assistant" element={<AIAssistant />} />
-                      <Route path="/style-advisor" element={<StyleAdvisor />} />
-                      <Route path="/outfit-matching" element={<OutfitMatching />} />
                       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-                      <Route path="/cart" element={<Cart />} />
-                      <Route path="/checkout" element={<Checkout />} />
-                      <Route path="/profile" element={<Profile />} />
-                      <Route path="/wallet" element={<Wallet />} />
-                      <Route path="/wishlist" element={<Wishlist />} />
-                      <Route path="/orders" element={<MyOrders />} />
-                      
-                      {/* Admin Routes */}
                       <Route path="/admin/login" element={<AdminLogin />} />
+                      <Route element={<Layout />}>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/about" element={<About />} />
+                        <Route path="/shop" element={<Shop />} />
+                        <Route path="/men" element={<Men />} />
+                        <Route path="/women" element={<Women />} />
+                        <Route path="/product/:id" element={<ProductDetail />} />
+                        <Route path="/ai-assistant" element={<AIAssistant />} />
+                        <Route path="/style-advisor" element={<StyleAdvisor />} />
+                        <Route path="/outfit-matching" element={<OutfitMatching />} />
+                        <Route path="/cart" element={<Cart />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/wallet" element={<Wallet />} />
+                        <Route path="/wishlist" element={<Wishlist />} />
+                        <Route path="/orders" element={<MyOrders />} />
+                        <Route path="*" element={<NotFound />} />
+                      </Route>
                       <Route path="/admin/dashboard" element={<AdminDashboard />} />
                       <Route path="/admin/products" element={<AdminProducts />} />
                       <Route path="/admin/orders" element={<AdminOrders />} />
@@ -102,11 +108,18 @@ const App = () => (
                       <Route path="/admin/inventory" element={<AdminInventory />} />
                       <Route path="/admin/analytics" element={<AdminAnalytics />} />
                       <Route path="/admin/returns" element={<AdminReturns />} />
-                      
-                      <Route path="*" element={<NotFound />} />
+                      <Route path="/admin/marketing" element={<AdminMarketing />} />
+                      <Route path="/admin/marketing/:section" element={<AdminMarketing />} />
+                      <Route path="/admin/reports" element={<AdminReports />} />
+                      <Route path="/admin/reports/:section" element={<AdminReports />} />
+                      <Route path="/admin/settings" element={<AdminSettings />} />
+                      <Route path="/admin/settings/:section" element={<AdminSettings />} />
+                      <Route path="/admin/staff" element={<AdminStaff />} />
+                      <Route path="/admin/staff/:section" element={<AdminStaff />} />
                     </Routes>
+                    <FloatingChatWidget />
+                    <CartDrawer />
                   </Suspense>
-                  <FloatingChatWidget />
                 </BrowserRouter>
               </TooltipProvider>
             </WishlistProvider>

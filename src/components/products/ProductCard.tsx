@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, type Easing } from 'framer-motion';
 import { ShoppingBag, Heart, Eye } from 'lucide-react';
@@ -14,14 +14,39 @@ interface ProductCardProps {
   index?: number;
 }
 
-// Premium easing curve
-const premiumEase: Easing = [0.4, 0, 0.2, 1];
+const premiumEase: Easing = [0.22, 1, 0.36, 1];
+
+const preloadImage = (url: string) => {
+  if (!url || typeof document === 'undefined') return;
+  const existing = document.querySelector(`link[href="${url}"]`);
+  if (existing) return;
+  const link = document.createElement('link');
+  link.rel = 'prefetch';
+  link.as = 'image';
+  link.href = url;
+  document.head.appendChild(link);
+};
+
+const prefetchProductPage = () => {
+  import('@/pages/ProductDetail');
+};
 
 const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const { addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const inWishlist = isInWishlist(product.id);
+
+  const imageUrl = useMemo(
+    () => normalizeImageUrl(product.variants?.[0]?.images?.[0] || product.image || product.images?.[0] || ''),
+    [product],
+  );
+
+  const handlePrefetch = useCallback(() => {
+    prefetchProductPage();
+    preloadImage(imageUrl);
+  }, [imageUrl]);
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -39,9 +64,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
     toggleWishlist(product);
     toast({
       title: inWishlist ? 'Removed from wishlist' : 'Added to wishlist',
-      description: inWishlist 
-        ? `${product.name} has been removed from your wishlist.`
-        : `${product.name} has been added to your wishlist.`,
+      description: inWishlist ? `${product.name} has been removed from your wishlist.` : `${product.name} has been added to your wishlist.`,
     });
   };
 
@@ -53,145 +76,109 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
+      <motion.article
+        initial={{ opacity: 0, y: 28 }}
         whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-30px" }}
-        transition={{ duration: 0.5, delay: index * 0.08, ease: premiumEase }}
-        whileHover={{ y: -8 }}
-        className="group product-card-premium"
+        viewport={{ once: true, margin: '-24px' }}
+        transition={{ duration: 0.48, delay: index * 0.06, ease: premiumEase }}
+        whileHover={{ y: -6 }}
+        className="product-card-premium group h-full"
       >
-        <Link to={`/product/${product.id}`} className="block">
-          <motion.div 
-            className="relative aspect-product overflow-hidden bg-muted mb-4"
-            whileHover={{ boxShadow: '0 20px 40px -12px rgba(0,0,0,0.15)' }}
-            transition={{ duration: 0.4, ease: premiumEase }}
-          >
-            {/* Product Image with Premium Hover Effect */}
-            <motion.img
-              src={normalizeImageUrl(product.variants?.[0]?.images?.[0] || product.image || product.images?.[0] || '')}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              whileHover={{ scale: 1.08 }}
-              transition={{ duration: 0.6, ease: premiumEase }}
-              loading="lazy"
-            />
-            
-            {/* Subtle Overlay on Hover */}
-            <motion.div 
-              className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-500" 
-            />
-            
-            {/* Hover Actions - Fade In Smoothly */}
-            <div className="absolute inset-0">
-              <div className="absolute top-3 right-3 flex flex-col gap-2">
-                {/* Wishlist Button */}
-                <motion.button
-                  onClick={handleWishlistToggle}
-                  className={`p-2 rounded-full transition-all duration-300 opacity-0 group-hover:opacity-100 ${
-                    inWishlist 
-                      ? 'bg-foreground text-background' 
-                      : 'bg-background/90 backdrop-blur-sm hover:bg-foreground hover:text-background'
-                  }`}
-                  style={{ transitionDelay: '0.05s' }}
+        <Link
+          to={`/product/${product.id}`}
+          className="flex h-full flex-col"
+          onMouseEnter={handlePrefetch}
+          onTouchStart={handlePrefetch}
+          onFocus={handlePrefetch}
+        >
+          <div className="theme-elevated flex h-full flex-col overflow-hidden rounded-[1.55rem] p-2.5 md:p-3">
+            <motion.div className="theme-image-stage relative mb-3 overflow-hidden rounded-[1.2rem] md:mb-4" whileHover={{ boxShadow: '0 24px 50px -22px rgba(0,0,0,0.2)' }}>
+              <motion.div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+              <div className="image-fade-wrap aspect-[3/4] flex items-center justify-center overflow-hidden bg-[#f9f9f9] dark:bg-[#0a0a0a]" data-loaded={imageLoaded}>
+                <motion.img
+                  src={imageUrl}
+                  alt={product.name}
+                  className="image-fade h-full w-full object-contain p-2"
+                  data-loaded={imageLoaded}
                   whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-                >
-                  <Heart className={`w-4 h-4 ${inWishlist ? 'fill-current' : ''}`} />
-                </motion.button>
-
-                {/* Quick View Button */}
-                <motion.button
-                  onClick={handleQuickView}
-                  className="p-2 bg-background/90 backdrop-blur-sm rounded-full hover:bg-foreground hover:text-background transition-all duration-300 opacity-0 group-hover:opacity-100"
-                  style={{ transitionDelay: '0.1s' }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  aria-label="Quick view"
-                >
-                  <Eye className="w-4 h-4" />
-                </motion.button>
+                  whileTap={{ scale: 1.02 }}
+                  transition={{ duration: 0.8, ease: premiumEase }}
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  fetchPriority={index === 0 ? 'high' : 'auto'}
+                  decoding="async"
+                  onLoad={() => setImageLoaded(true)}
+                />
               </div>
-            </div>
-            
-            {/* Always visible wishlist button on mobile */}
-            <button
-              onClick={handleWishlistToggle}
-              className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-300 md:hidden ${
-                inWishlist 
-                  ? 'bg-foreground text-background' 
-                  : 'bg-background/90 backdrop-blur-sm'
-              }`}
-              aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-            >
-              <Heart className={`w-4 h-4 ${inWishlist ? 'fill-current' : ''}`} />
-            </button>
-            
-            {/* Badges */}
-            <div className="absolute top-3 left-3 flex flex-col gap-2">
+
+            <motion.div className="absolute inset-0 bg-gradient-to-t from-black/14 via-transparent to-transparent opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+
+            <div className="absolute left-3 top-3 flex flex-col gap-2">
               {product.isNew && (
-                <motion.span 
-                  className="badge-new"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 0.2 }}
-                >
+                <motion.span className="badge-new" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.16 }}>
                   New
                 </motion.span>
               )}
               {product.discount && product.discount > 0 && (
-                <motion.span 
-                  className="badge-sale"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 0.3 }}
-                >
+                <motion.span className="badge-sale" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.24 }}>
                   -{product.discount}%
                 </motion.span>
               )}
             </div>
-          </motion.div>
 
-          <div className="space-y-2">
-            <motion.h3 
-              className="text-sm font-medium line-clamp-1 transition-colors duration-300 group-hover:text-foreground/80"
-              whileHover={{ x: 2 }}
-            >
-              {product.name}
-            </motion.h3>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{formatPrice(product.price)}</span>
-                {product.originalPrice && (
-                  <span className="text-xs text-muted-foreground line-through">
-                    {formatPrice(product.originalPrice)}
-                  </span>
-                )}
+            <div className="absolute right-3 top-3 flex flex-col gap-2">
+              <motion.button
+                onClick={handleWishlistToggle}
+                className={`touch-target rounded-full border backdrop-blur-xl transition-all duration-300 ${
+                  inWishlist ? 'border-primary bg-primary text-primary-foreground' : 'border-foreground/10 bg-background/60 text-foreground hover:border-foreground/30 hover:bg-background/80'
+                }`}
+                whileTap={{ scale: 0.92 }}
+                whileHover={{ scale: 1.04 }}
+                aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+              >
+                <Heart className={`h-[1.05rem] w-[1.05rem] ${inWishlist ? 'fill-current' : ''}`} />
+              </motion.button>
+
+              <motion.button
+                onClick={handleQuickView}
+                className="hidden rounded-full border border-foreground/10 bg-background/60 p-2.5 text-foreground backdrop-blur-xl transition-all duration-300 hover:border-foreground/30 hover:bg-background/80 md:flex"
+                whileTap={{ scale: 0.92 }}
+                whileHover={{ scale: 1.04 }}
+                aria-label="Quick view"
+              >
+                <Eye className="h-4 w-4" />
+              </motion.button>
+            </div>
+            </motion.div>
+
+            <div className="flex min-h-[10.5rem] flex-1 flex-col gap-2 px-1 pb-1">
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{product.category}</p>
+                <motion.h3 className="line-clamp-2 min-h-[3rem] text-[0.95rem] font-medium leading-6" whileHover={{ x: 2 }}>
+                  {product.name}
+                </motion.h3>
+              </div>
+
+              <div className="flex min-h-[1.75rem] items-end gap-2">
+                <span className="text-[0.98rem] font-semibold tracking-tight">{formatPrice(product.price)}</span>
+                {product.originalPrice && <span className="text-xs text-muted-foreground line-through">{formatPrice(product.originalPrice)}</span>}
+              </div>
+
+              <div className="mt-auto pt-3">
+                <motion.button
+                  onClick={handleQuickAdd}
+                  className="btn-shine tap-lift touch-pill flex w-full items-center justify-center gap-2 border border-foreground/16 bg-foreground/[0.05] px-4 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-foreground shadow-[0_18px_35px_-28px_hsl(var(--foreground)/0.42),inset_0_1px_0_rgba(255,255,255,0.16)] transition-all duration-300 group-hover:border-foreground/40 group-hover:bg-foreground/[0.1]"
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  Quick Add
+                </motion.button>
               </div>
             </div>
-            
-            {/* Quick Add Button with Premium Hover */}
-            <motion.button
-              onClick={handleQuickAdd}
-              className="w-full mt-3 py-2 border border-foreground text-foreground text-xs uppercase tracking-widest font-medium 
-                       flex items-center justify-center gap-2 transition-all duration-300
-                       hover:bg-foreground hover:text-background btn-shine"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              Quick Add
-            </motion.button>
           </div>
         </Link>
-      </motion.div>
+      </motion.article>
 
-      {/* Quick View Modal */}
-      <ProductQuickView
-        product={product}
-        isOpen={isQuickViewOpen}
-        onClose={() => setIsQuickViewOpen(false)}
-      />
+      <ProductQuickView product={product} isOpen={isQuickViewOpen} onClose={() => setIsQuickViewOpen(false)} />
     </>
   );
 };

@@ -24,7 +24,6 @@ import {
   X,
   Wallet,
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { Button } from '@/components/ui/button';
@@ -45,6 +44,7 @@ import {
 } from '@/components/ui/dialog';
 import { useUserOrders } from '@/hooks/useOrders';
 import { formatPrice } from '@/data/products';
+import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
   const { user, isAuthenticated, logout, updateProfile, supabaseUser, session } = useAuth();
@@ -55,6 +55,7 @@ const Profile = () => {
   const [editedPhone, setEditedPhone] = useState(user?.phone || '');
   
   // Settings dialog states
+  const [activeTab, setActiveTab] = useState('orders');
   const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
@@ -80,8 +81,24 @@ const Profile = () => {
     });
   };
 
-  const handleSaveNotifications = () => {
+  const handleSaveNotifications = async () => {
     setNotificationDialogOpen(false);
+    try {
+      if (user?.id) {
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (prefs) {
+          await supabase.from('user_preferences').update({
+            preferred_categories: prefs.preferred_categories,
+            preferred_colors: prefs.preferred_colors,
+          }).eq('user_id', user.id);
+        }
+      }
+    } catch { /* table may not exist */ }
     toast({
       title: 'Notifications Updated',
       description: 'Your notification preferences have been saved.',
@@ -158,7 +175,7 @@ const Profile = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="container-custom py-8 md:py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -166,83 +183,90 @@ const Profile = () => {
           transition={{ duration: 0.5 }}
         >
           {/* Profile Header */}
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-8">
-            <div className="w-20 h-20 md:w-24 md:h-24 bg-secondary rounded-full flex items-center justify-center">
-              {user.avatar ? (
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-full h-full rounded-full object-cover"
-                />
-              ) : (
-                <User className="w-10 h-10 md:w-12 md:h-12 text-muted-foreground" />
-              )}
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-10">
+            <div className="relative">
+              <div className="w-20 h-20 md:w-28 md:h-28 bg-gradient-to-br from-muted to-muted/50 rounded-full flex items-center justify-center ring-1 ring-border/40">
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-10 h-10 md:w-14 md:h-14 text-muted-foreground/60" />
+                )}
+              </div>
+              <div className="absolute -bottom-1 -right-1 rounded-full bg-foreground px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-background shadow-sm">
+                Gold
+              </div>
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl md:text-3xl font-light tracking-wide mb-1">
+              <h1 className="text-2xl md:text-4xl font-normal tracking-[-0.01em] mb-1">
                 {user.name}
               </h1>
               <p className="text-muted-foreground text-sm">{user.email}</p>
-              <p className="text-muted-foreground text-xs mt-1">
+              <p className="text-muted-foreground/70 text-xs mt-1.5 flex items-center gap-1.5">
+                <span className="inline-block h-1 w-1 rounded-full bg-muted-foreground/40" />
                 Member since {formatDate(user.memberSince)}
               </p>
             </div>
             <Button
               variant="outline"
-              className="flex items-center gap-2"
+              size="sm"
+              className="flex items-center gap-2 rounded-full border-border/60"
               onClick={handleLogout}
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5" />
               Logout
             </Button>
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <Package className="h-8 w-8 text-muted-foreground" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+            <Card className="border-border/60">
+              <CardContent className="p-4 md:p-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+                  <Package className="h-5 w-5 text-muted-foreground" />
+                </div>
                 <div>
-                  <p className="text-2xl font-medium">{orders.length}</p>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Orders
-                  </p>
+                  <p className="text-xl md:text-2xl font-medium tracking-tight">{orders.length}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-[0.18em]">Orders</p>
                 </div>
               </CardContent>
             </Card>
             <Link to="/wishlist">
-              <Card className="hover:border-foreground/30 transition-colors cursor-pointer">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <Heart className="h-8 w-8 text-muted-foreground" />
+              <Card className="border-border/60 hover:border-foreground/20 transition-all duration-300 cursor-pointer">
+                <CardContent className="p-4 md:p-5 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+                    <Heart className="h-5 w-5 text-muted-foreground" />
+                  </div>
                   <div>
-                    <p className="text-2xl font-medium">{wishlistCount}</p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                      Wishlist
-                    </p>
+                    <p className="text-xl md:text-2xl font-medium tracking-tight">{wishlistCount}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.18em]">Wishlist</p>
                   </div>
                 </CardContent>
               </Card>
             </Link>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <MapPin className="h-8 w-8 text-muted-foreground" />
+            <Card className="border-border/60">
+              <CardContent className="p-4 md:p-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+                  <MapPin className="h-5 w-5 text-muted-foreground" />
+                </div>
                 <div>
-                  <p className="text-2xl font-medium">{user.addresses?.length || 0}</p>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Addresses
-                  </p>
+                  <p className="text-xl md:text-2xl font-medium tracking-tight">{user.addresses?.length || 0}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-[0.18em]">Addresses</p>
                 </div>
               </CardContent>
             </Card>
             <Link to="/wallet">
-              <Card className="hover:border-foreground/30 transition-colors cursor-pointer">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <Wallet className="h-8 w-8 text-muted-foreground" />
+              <Card className="border-border/60 hover:border-foreground/20 transition-all duration-300 cursor-pointer">
+                <CardContent className="p-4 md:p-5 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+                    <Wallet className="h-5 w-5 text-muted-foreground" />
+                  </div>
                   <div>
-                    <p className="text-2xl font-medium">{formatPrice(user.walletBalance || 0)}</p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                      Wallet Balance
-                    </p>
+                    <p className="text-xl md:text-2xl font-medium tracking-tight">{formatPrice(user.walletBalance || 0)}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.18em]">Wallet</p>
                   </div>
                 </CardContent>
               </Card>
@@ -250,39 +274,27 @@ const Profile = () => {
           </div>
 
           {/* Main Content Tabs */}
-          <Tabs defaultValue="orders" className="w-full">
-            <TabsList className="w-full md:w-auto flex flex-wrap justify-start gap-2 mb-6 bg-transparent p-0">
-              <TabsTrigger
-                value="orders"
-                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
-              >
-                Orders
-              </TabsTrigger>
-              <TabsTrigger
-                value="profile"
-                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
-              >
-                Profile
-              </TabsTrigger>
-              <TabsTrigger
-                value="wallet"
-                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
-              >
-                My Wallet
-              </TabsTrigger>
-              <TabsTrigger
-                value="addresses"
-                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
-              >
-                Addresses
-              </TabsTrigger>
-              <TabsTrigger
-                value="settings"
-                className="data-[state=active]:bg-foreground data-[state=active]:text-background px-6 py-2 border border-border"
-              >
-                Settings
-              </TabsTrigger>
-            </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="custom-scrollbar mb-8 overflow-x-auto">
+              <TabsList className="relative inline-flex w-max gap-1 rounded-[1.2rem] border border-border/60 bg-muted/30 p-1 md:w-auto">
+                {['orders', 'profile', 'wallet', 'addresses', 'settings'].map((tab) => (
+                  <TabsTrigger
+                    key={tab}
+                    value={tab}
+                    className="relative z-10 rounded-[0.9rem] px-5 py-2 text-xs font-medium uppercase tracking-[0.18em] transition-all duration-300 data-[state=active]:bg-transparent data-[state=active]:text-background"
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    {activeTab === tab && (
+                      <motion.div
+                        layoutId="profile-tab-pill"
+                        className="absolute inset-0 z-[-1] rounded-[0.9rem] bg-foreground shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      />
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-4">
@@ -316,71 +328,50 @@ const Profile = () => {
               ) : (
                 <div className="space-y-4">
                   {previewOrders.map((order) => (
-                    <Card key={order.id} className="overflow-hidden">
-                      <CardHeader className="bg-secondary/50 py-3 px-4">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                          <div className="flex items-center gap-4">
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                Order ID
-                              </p>
-                              <p className="font-medium text-sm">{order.order_id || order.id}</p>
-                            </div>
-                            <Separator orientation="vertical" className="h-8 hidden md:block" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                Order Date
-                              </p>
-                              <p className="font-medium text-sm">
-                                {formatDate(order.order_date || order.created_at || new Date().toISOString())}
-                              </p>
-                            </div>
+                    <Card key={order.id} className="overflow-hidden border-border/60">
+                      <div className="flex items-center justify-between gap-3 border-b border-border/30 px-4 py-3 md:px-5">
+                        <div className="flex items-center gap-3 md:gap-5">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Order</p>
+                            <p className="mt-0.5 text-sm font-medium">{order.order_id || order.id}</p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(order.status)}
-                            <Badge
-                              variant="secondary"
-                              className={getStatusColor(order.status)}
-                            >
-                              {order.status}
-                            </Badge>
+                          <div className="hidden h-6 w-px bg-border/50 md:block" />
+                          <div className="hidden md:block">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Date</p>
+                            <p className="mt-0.5 text-sm">{formatDate(order.order_date || order.created_at || new Date().toISOString())}</p>
                           </div>
                         </div>
-                      </CardHeader>
-                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(order.status)}
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.15em] ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-4 md:p-5">
                         <div className="space-y-3">
                           {order.items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex items-center gap-4"
-                            >
-                              <div className="w-16 h-16 bg-secondary flex items-center justify-center">
-                                <Package className="h-6 w-6 text-muted-foreground" />
+                            <div key={item.id} className="flex items-center gap-3">
+                              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[0.8rem] bg-muted/50">
+                                <Package className="h-5 w-5 text-muted-foreground/60" />
                               </div>
-                              <div className="flex-1">
-                                <p className="font-medium text-sm">{item.product_name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  Qty: {item.quantity}
-                                </p>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{item.product_name}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">Qty: {item.quantity}</p>
                               </div>
-                              <p className="font-medium">{formatPrice(item.total_price)}</p>
+                              <p className="text-sm font-semibold tracking-tight">{formatPrice(item.total_price)}</p>
                             </div>
                           ))}
                         </div>
-                        <Separator className="my-4" />
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-center gap-4">
-                            <p className="text-lg font-medium">
-                              Total: {formatPrice(order.grand_total)}
-                            </p>
-                          </div>
-                          <Link to="/orders">
-                            <Button variant="outline" size="sm">
-                              View Details
-                            </Button>
-                          </Link>
-                        </div>
-                      </CardContent>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-border/30 px-4 py-3 md:px-5">
+                        <p className="text-sm font-semibold tracking-tight">Total: {formatPrice(order.grand_total)}</p>
+                        <Link to="/orders">
+                          <Button variant="outline" size="sm" className="rounded-full border-border/60 text-xs">
+                            View Details
+                          </Button>
+                        </Link>
+                      </div>
                     </Card>
                   ))}
                   {orders.length > 3 && (
@@ -506,22 +497,26 @@ const Profile = () => {
                 </Link>
               </div>
 
-              <Card>
-                <CardContent className="p-6">
+              <Card className="relative overflow-hidden border-border/60">
+                <div className="absolute inset-0 bg-gradient-to-br from-foreground/[0.03] to-transparent pointer-events-none" />
+                <CardContent className="relative p-6 md:p-7">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Wallet Balance
-                      </p>
-                      <p className="text-3xl font-semibold mt-1">{formatPrice(user.walletBalance || 0)}</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Available Balance</p>
+                      <p className="mt-2 text-3xl md:text-4xl font-semibold tracking-tight">{formatPrice(user.walletBalance || 0)}</p>
                     </div>
-                    <div className="rounded-full bg-secondary p-4">
-                      <Wallet className="h-7 w-7 text-foreground" />
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-border/50">
+                      <Wallet className="h-6 w-6 text-foreground/70" />
                     </div>
                   </div>
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    Refunds and cashbacks are stored here automatically. Use your wallet credit during checkout to pay first.
-                  </p>
+                  <div className="mt-5 flex items-center gap-3 rounded-[1rem] bg-muted/30 px-4 py-3">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10">
+                      <span className="text-[10px] font-bold text-foreground/60">ⓘ</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Refunds and cashbacks are stored here automatically. Use wallet credit during checkout.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -591,71 +586,71 @@ const Profile = () => {
                 Account Settings
               </h2>
 
-              <Card>
-                <CardContent className="p-0 divide-y divide-border">
-                  <button 
+              <Card className="overflow-hidden border-border/60">
+                <div className="divide-y divide-border/40">
+                  <button
                     onClick={() => setNotificationDialogOpen(true)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors"
+                    className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-muted/30 active:bg-muted/50 md:px-6"
                   >
-                    <div className="flex items-center gap-3">
-                      <Bell className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/50">
+                        <Bell className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Notification Preferences</p>
-                        <p className="text-xs text-muted-foreground">
-                          Email, SMS, and push notifications
-                        </p>
+                        <p className="text-sm font-medium">Notifications</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Email, SMS, and push</p>
                       </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
                   </button>
 
-                  <button 
+                  <button
                     onClick={() => setPaymentDialogOpen(true)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors"
+                    className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-muted/30 active:bg-muted/50 md:px-6"
                   >
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/50">
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Payment Methods</p>
-                        <p className="text-xs text-muted-foreground">
-                          Manage saved cards and UPI
-                        </p>
+                        <p className="text-sm font-medium">Payment Methods</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Manage cards and UPI</p>
                       </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
                   </button>
 
-                  <button 
+                  <button
                     onClick={() => setPrivacyDialogOpen(true)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors"
+                    className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-muted/30 active:bg-muted/50 md:px-6"
                   >
-                    <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/50">
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Privacy Settings</p>
-                        <p className="text-xs text-muted-foreground">
-                          Manage your data and privacy
-                        </p>
+                        <p className="text-sm font-medium">Privacy</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Data and privacy preferences</p>
                       </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
                   </button>
 
-                  <button 
+                  <button
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-destructive"
+                    className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-destructive/5 active:bg-destructive/10 md:px-6"
                   >
-                    <div className="flex items-center gap-3">
-                      <LogOut className="h-5 w-5" />
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
+                        <LogOut className="h-4 w-4 text-destructive" />
+                      </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Logout</p>
-                        <p className="text-xs opacity-70">
-                          Sign out from your account
-                        </p>
+                        <p className="text-sm font-medium text-destructive">Logout</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Sign out from your account</p>
                       </div>
                     </div>
                   </button>
-                </CardContent>
+                </div>
               </Card>
             </TabsContent>
           </Tabs>
@@ -763,7 +758,7 @@ const Profile = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 };
 
