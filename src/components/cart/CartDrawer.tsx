@@ -132,7 +132,6 @@ export default function CartDrawer() {
                       <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Estimated total</p>
                       <p className="mt-1 text-xl font-semibold">{formatPrice(totalPrice)}</p>
                     </div>
-                    <p className="max-w-[9rem] text-right text-[11px] leading-5 text-muted-foreground">Apple Wallet style checkout, optimized for one-hand flow.</p>
                   </div>
                   <Link
                     to="/checkout"

@@ -1,49 +1,45 @@
-import React, { useMemo, useState } from 'react';
-import { addDays, format } from 'date-fns';
+import React, { useMemo, useState, useCallback } from 'react';
+import { format, differenceInDays } from 'date-fns';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Box, CheckCircle, Clock, CreditCard, Eye, Loader2, Search, Undo2, XSquare } from 'lucide-react';
+import { CheckCircle, ChevronDown, Clock, CreditCard, Eye, Loader2, Package, Search, Undo2, User, X, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { ProductImageViewer } from '@/components/admin/ProductImageViewer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatPrice, products } from '@/data/products';
 import { supabase } from '@/integrations/supabase/client';
-import { supabaseRestUpdate } from '@/integrations/supabase/publicRest';
 import { normalizeOrders } from '@/lib/orders';
 import { getReturnReasonBadgeClass, getReturnReasonLabel, RETURN_REASON_OPTIONS } from '@/lib/returnReasons';
-import { getProductImage, normalizeImageUrl } from '@/lib/utils';
+import { getProductImage, normalizeImageUrl, cn } from '@/lib/utils';
 import { getAdminApiHeaders } from '@/lib/adminApi';
 import { createAdminNotification } from '@/lib/adminNotifications';
 import { toast } from 'sonner';
 
 const DEFAULT_PRODUCT_IMAGE = '/placeholder.svg';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  requested: ['approved', 'rejected'],
+  approved: ['picked_up', 'rejected'],
+  picked_up: ['refunded', 'rejected'],
+  refunded: [],
+  rejected: [],
+  cancelled: [],
 };
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
-};
-
-const rowVariants = {
-  hidden: { opacity: 0, x: -8 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
-};
-
-const modalContentVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-};
+const STATUS_FLOW = [
+  { key: 'requested', label: 'Requested', icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-500' },
+  { key: 'approved', label: 'Approved', icon: CheckCircle, color: 'text-blue-500', bg: 'bg-blue-500' },
+  { key: 'picked_up', label: 'Picked Up', icon: Package, color: 'text-orange-500', bg: 'bg-orange-500' },
+  { key: 'refunded', label: 'Refunded', icon: CreditCard, color: 'text-emerald-500', bg: 'bg-emerald-500' },
+];
 
 type AdminReturnRow = Record<string, unknown> & {
   id?: string;
@@ -60,20 +56,13 @@ type AdminReturnRow = Record<string, unknown> & {
   quantity?: number;
   order_item_id?: string;
   refund_method?: string | null;
-  payment_method?: string | null;
+  payment_mode?: string | null;
   items?: AdminReturnRow[];
   profiles?: { display_name?: string } | null;
   orders?: { order_id?: string } | null;
   _order_total?: number;
   order_items?: { product_name?: string; product_image?: string; unit_price?: number };
 };
-
-interface AdminReturnsApiData {
-  returnRequests?: AdminReturnRow[];
-  profiles?: AdminReturnRow[];
-  orders?: AdminReturnRow[];
-  items?: AdminReturnRow[];
-}
 
 type UpdateReturnPayload = {
   id: string;
@@ -87,11 +76,11 @@ type UpdateReturnPayload = {
   wallet_description?: string;
 };
 
-const parseApiResponse = async (response: Response): Promise<{ data?: AdminReturnsApiData; error?: string }> => {
+const parseApiResponse = async (response: Response) => {
   const text = await response.text();
   if (!text) return {};
   try {
-    return JSON.parse(text) as { data?: AdminReturnsApiData; error?: string };
+    return JSON.parse(text) as { data?: unknown; error?: string };
   } catch {
     return { error: text };
   }
@@ -108,77 +97,6 @@ const parseImageUrls = (value: unknown): string[] => {
   }
 };
 
-const isWalletRefundRequired = (ret: AdminReturnRow) => {
-  // Always credit wallet instantly as requested by admin
-  return true;
-};
-
-const buildReturnUpdateBody = (payload: UpdateReturnPayload) => {
-  const body: Record<string, unknown> = {};
-  if (payload.status !== undefined) body.status = payload.status;
-  if (payload.refund_amount !== undefined) body.refund_amount = payload.refund_amount;
-  if (payload.estimated_refund_date !== undefined) body.estimated_refund_date = payload.estimated_refund_date;
-  if (payload.admin_note !== undefined) body.admin_note = payload.admin_note;
-  return body;
-};
-
-const updateReturnViaRest = async (payload: UpdateReturnPayload) => {
-  const body = buildReturnUpdateBody(payload);
-  
-  const [returnRes, walletRes] = await Promise.all([
-    supabase.from('return_requests').update(body).eq('id', payload.id).select(),
-    payload.process_wallet_refund && payload.wallet_user_id && payload.refund_amount !== undefined
-      ? supabase.rpc('add_wallet_credit', {
-          p_user_id: payload.wallet_user_id,
-          p_amount: payload.refund_amount,
-          p_source: 'refund',
-          p_reference_id: payload.wallet_reference_id ?? payload.id,
-          p_description: payload.wallet_description ?? `Refund for return request #${payload.id.slice(0, 8)}`,
-        })
-      : Promise.resolve({ error: null }),
-  ]);
-
-  if (returnRes.error) {
-    throw new Error(returnRes.error.message);
-  }
-
-  if (walletRes?.error && !/duplicate|already exists/i.test(walletRes.error.message)) {
-    throw new Error(walletRes.error.message);
-  }
-
-  if (!returnRes.data || returnRes.data.length === 0) {
-    throw new Error('Return request not found or not updated');
-  }
-
-  if (payload.status) {
-    await createAdminNotification({
-      title: 'Return request updated',
-      message: `Return ${payload.id.slice(0, 8)} moved to ${payload.status.replaceAll('_', ' ')}.`,
-      type: payload.status === 'rejected' ? 'warning' : 'info',
-      eventType: 'return_request',
-      link: '/admin/returns',
-      metadata: {
-        returnId: payload.id,
-        status: payload.status,
-      },
-    }).catch(() => {});
-  }
-
-  if (payload.status === 'refunded' || (payload.refund_amount !== undefined && payload.refund_amount > 0)) {
-    await createAdminNotification({
-      title: 'Refund processed',
-      message: `Refund updated for return ${payload.id.slice(0, 8)}.`,
-      type: 'success',
-      eventType: 'refund',
-      link: '/admin/returns',
-      metadata: {
-        returnId: payload.id,
-        refundAmount: Number(payload.refund_amount || 0),
-      },
-    }).catch(() => {});
-  }
-};
-
 const getStatusBadge = (status?: string) => {
   const value = (status || '').toLowerCase();
   if (value === 'requested') return <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30 whitespace-nowrap">Requested</Badge>;
@@ -189,9 +107,20 @@ const getStatusBadge = (status?: string) => {
   return <Badge variant="secondary" className="whitespace-nowrap">{status || 'Unknown'}</Badge>;
 };
 
+const isValidTransition = (current: string, next: string): boolean => {
+  const allowed = ALLOWED_TRANSITIONS[current.toLowerCase()];
+  return !!allowed && allowed.includes(next.toLowerCase());
+};
+
+const formatDate = (dateValue?: string | null) => {
+  if (!dateValue) return 'N/A';
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return 'N/A';
+  return format(date, 'dd MMM yyyy');
+};
+
 const loadReturns = async () => {
   try {
-    // Use authenticated Supabase client to bypass anon-key RLS restrictions
     const { data: returnRequests, error: returnError } = await supabase
       .from('return_requests')
       .select('*')
@@ -221,7 +150,7 @@ const loadReturns = async () => {
       orders: (ordersRes.data || []) as AdminReturnRow[],
       profiles: (profilesRes.data || []) as AdminReturnRow[],
       items: (itemsRes.data || []) as AdminReturnRow[],
-    } as AdminReturnsApiData;
+    };
   } catch {
     const response = await fetch('/api/admin/returns', {
       method: 'GET',
@@ -233,6 +162,71 @@ const loadReturns = async () => {
   }
 };
 
+const ReturnTimeline = ({ status }: { status: string }) => {
+  const currentStatus = status.toLowerCase();
+  const currentIdx = STATUS_FLOW.findIndex(s => s.key === currentStatus);
+  const isRejected = currentStatus === 'rejected';
+
+  if (isRejected) {
+    return (
+      <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/5 border border-red-500/20">
+        <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+          <XCircle className="w-5 h-5 text-red-500" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-red-600 dark:text-red-400">Return Rejected</p>
+          <p className="text-xs text-muted-foreground mt-0.5">This return request has been declined.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {STATUS_FLOW.map((step, index) => {
+        const isActive = index === currentIdx;
+        const isCompleted = index < currentIdx;
+        const isPending = index > currentIdx;
+        const Icon = step.icon;
+
+        return (
+          <div key={step.key} className="flex items-start gap-3">
+            <div className="flex flex-col items-center">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500",
+                isCompleted ? "bg-emerald-500" : isActive ? "bg-primary" : "bg-muted border border-border"
+              )}>
+                {isCompleted ? (
+                  <CheckCircle className="w-4 h-4 text-white" />
+                ) : (
+                  <Icon className={cn("w-4 h-4", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
+                )}
+              </div>
+              {index < STATUS_FLOW.length - 1 && (
+                <div className={cn(
+                  "w-0.5 h-8 transition-colors duration-500",
+                  isCompleted ? "bg-emerald-500" : "bg-border"
+                )} />
+              )}
+            </div>
+            <div className="pt-1">
+              <p className={cn(
+                "text-sm font-semibold",
+                isActive ? "text-foreground" : isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+              )}>
+                {step.label}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isCompleted ? 'Completed' : isActive ? 'Current' : 'Pending'}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const AdminReturns = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -240,6 +234,7 @@ const AdminReturns = () => {
   const [reasonFilter, setReasonFilter] = useState('all');
   const [selectedReturn, setSelectedReturn] = useState<AdminReturnRow | null>(null);
   const [adminNoteDraft, setAdminNoteDraft] = useState('');
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     const channel = supabase
@@ -302,34 +297,98 @@ const AdminReturns = () => {
 
   const updateReturnMutation = useMutation({
     mutationFn: async (payload: UpdateReturnPayload) => {
-      const requestBody = { ...payload };
+      let walletCredited = false;
 
-      try {
+      if (payload.process_wallet_refund && payload.wallet_user_id && payload.refund_amount !== undefined && payload.refund_amount > 0) {
+        const walletRef = payload.wallet_reference_id ?? payload.id;
+        const { data: existingCredit } = await supabase
+          .from('wallet_transactions')
+          .select('id')
+          .eq('reference_id', walletRef)
+          .eq('type', 'credit')
+          .eq('source', 'refund')
+          .limit(1);
+
+        if (!existingCredit || existingCredit.length === 0) {
+          const { error: rpcError } = await supabase.rpc('add_wallet_credit', {
+            p_user_id: payload.wallet_user_id,
+            p_amount: payload.refund_amount,
+            p_source: 'refund',
+            p_reference_id: walletRef,
+            p_description: payload.wallet_description ?? `Refund for return #${String(payload.id).slice(0, 8)}`,
+          });
+
+          if (rpcError) {
+            if (/permission denied/i.test(rpcError.message)) {
+              toast.warning('Wallet credit failed — run the grant migration to fix');
+            } else if (!/duplicate|already exists/i.test(rpcError.message)) {
+              const response = await fetch('/api/admin/returns', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(await getAdminApiHeaders()),
+                },
+                body: JSON.stringify(payload),
+              });
+
+              const result = await parseApiResponse(response);
+              if (!response.ok) {
+                throw new Error(result.error || `Failed to process refund (HTTP ${response.status})`);
+              }
+              walletCredited = true;
+            }
+          } else {
+            walletCredited = true;
+          }
+        } else {
+          walletCredited = true;
+        }
+      }
+
+      const body: Record<string, unknown> = {};
+      if (payload.status !== undefined) body.status = payload.status;
+      if (payload.refund_amount !== undefined) body.refund_amount = payload.refund_amount;
+      if (payload.estimated_refund_date !== undefined) body.estimated_refund_date = payload.estimated_refund_date;
+      if (payload.admin_note !== undefined) body.admin_note = payload.admin_note;
+
+      const { error: updateError } = await supabase
+        .from('return_requests')
+        .update(body)
+        .eq('id', payload.id)
+        .select('*');
+
+      if (updateError) {
         const response = await fetch('/api/admin/returns', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(await getAdminApiHeaders()),
           },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify(payload),
         });
 
         const result = await parseApiResponse(response);
         if (!response.ok) {
           throw new Error(result.error || `Failed to update return (HTTP ${response.status})`);
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '';
-        if (!/HTTP 401|HTTP 404|Unauthorized|not found/i.test(message)) {
-          throw error;
-        }
-
-        await updateReturnViaRest(payload);
       }
+
+      if (payload.status) {
+        createAdminNotification({
+          title: 'Return request updated',
+          message: `Return ${String(payload.id).slice(0, 8)} moved to ${payload.status.replaceAll('_', ' ')}.`,
+          type: payload.status === 'rejected' ? 'warning' : 'info',
+          eventType: 'return_request',
+          link: '/admin/returns',
+          metadata: { returnId: payload.id, status: payload.status },
+        }).catch(() => {});
+      }
+
+      return { walletCredited };
     },
-    onSuccess: (_, payload) => {
+    onSuccess: (result, payload) => {
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
-      
+
       setSelectedReturn((prev) => {
         if (prev && String(prev.id) === payload.id) {
           const updated = { ...prev };
@@ -337,15 +396,16 @@ const AdminReturns = () => {
           if (payload.admin_note !== undefined) updated.admin_note = payload.admin_note;
           return updated;
         }
-        return prev;
       });
 
-      if (payload.status !== 'refunded') {
-        let message = payload.status ? `Return status updated to ${payload.status.replace('_', ' ')}` : 'Admin note saved';
-        if (payload.process_wallet_refund && payload.refund_amount) {
-          message += `. ₹${payload.refund_amount} credited to user wallet instantly!`;
+      if (payload.status === 'refunded') {
+        if (result?.walletCredited) {
+          toast.success(`Refund processed — ₹${Number(payload.refund_amount || 0).toLocaleString('en-IN')} credited to wallet`);
+        } else {
+          toast.success(`Return marked as refunded`);
         }
-        toast.success(message);
+      } else {
+        toast.success(`Return status updated to ${(payload.status || '').replace('_', ' ')}`);
       }
     },
     onError: (error: unknown) => {
@@ -368,234 +428,518 @@ const AdminReturns = () => {
     });
   }, [returns, reasonFilter, searchTerm, statusFilter]);
 
-  const computeRefundTotal = (ret: AdminReturnRow) => {
+  const computeRefundTotal = useCallback((ret: AdminReturnRow) => {
     const itemTotal = (ret.items || []).reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.order_items?.unit_price || 0), 0);
     return itemTotal > 0 ? itemTotal : Number(ret._order_total || 0);
+  }, []);
+
+  const toggleExpand = (id: string) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const processRefund = async (ret: AdminReturnRow) => {
+  const processRefund = useCallback(async (ret: AdminReturnRow) => {
     const refundAmount = computeRefundTotal(ret);
-    const shouldCreditWallet = isWalletRefundRequired(ret);
-    try {
-      await updateReturnMutation.mutateAsync({
-        id: String(ret.id),
-        status: 'refunded',
-        refund_amount: refundAmount,
-        process_wallet_refund: shouldCreditWallet, 
-        wallet_user_id: ret.user_id,
-        wallet_reference_id: String(ret.id),
-        wallet_description: `Refund for return request #${String(ret.id).slice(0, 8)}`,
-      });
+    const prevStatus = String(ret.status || '').toLowerCase();
 
-      queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
-      toast.success(
-        shouldCreditWallet
-          ? `Refund marked complete. ₹${refundAmount} credited to customer wallet.`
-          : `Refund marked complete for ₹${refundAmount}.`
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to process refund');
-      console.error(error);
+    if (prevStatus === 'refunded') {
+      toast.error('This return has already been refunded');
+      return;
     }
-  };
 
-  const updateStatus = (ret: AdminReturnRow, status: string) => {
-    if (status === 'refunded') {
+    if (prevStatus !== 'picked_up') {
+      toast.error('Items must be picked up before processing refund');
+      return;
+    }
+
+    await updateReturnMutation.mutateAsync({
+      id: String(ret.id),
+      status: 'refunded',
+      refund_amount: refundAmount,
+      process_wallet_refund: true,
+      wallet_user_id: ret.user_id,
+      wallet_reference_id: String(ret.id),
+      wallet_description: `Refund for return #${String(ret.id).slice(0, 8)}`,
+    });
+  }, [computeRefundTotal, updateReturnMutation]);
+
+  const updateStatus = useCallback((ret: AdminReturnRow, nextStatus: string) => {
+    const currentStatus = String(ret.status || '').toLowerCase();
+
+    if (!isValidTransition(currentStatus, nextStatus)) {
+      toast.error(`Cannot move from "${currentStatus.replace('_', ' ')}" to "${nextStatus.replace('_', ' ')}"`);
+      return;
+    }
+
+    if (nextStatus === 'refunded') {
       processRefund(ret);
       return;
     }
-    const payload: UpdateReturnPayload = { id: String(ret.id), status };
-    if (status === 'approved') {
-      payload.estimated_refund_date = addDays(new Date(), 7).toISOString();
-      payload.refund_amount = computeRefundTotal(ret);
+
+    const payload: UpdateReturnPayload = { id: String(ret.id), status: nextStatus };
+    if (nextStatus === 'approved') {
+      payload.refund_amount = Math.round(computeRefundTotal(ret));
     }
     updateReturnMutation.mutate(payload);
+  }, [computeRefundTotal, processRefund, updateReturnMutation]);
+
+  const getNextAction = (ret: AdminReturnRow) => {
+    const s = String(ret.status || '').toLowerCase();
+    if (s === 'requested') return { label: 'Approve', nextStatus: 'approved', variant: 'default' as const, icon: CheckCircle };
+    if (s === 'approved') return { label: 'Mark Picked Up', nextStatus: 'picked_up', variant: 'default' as const, icon: Package };
+    if (s === 'picked_up') return { label: 'Process Refund', nextStatus: 'refunded', variant: 'default' as const, icon: CreditCard };
+    return null;
   };
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: returns.length };
+    returns.forEach(r => {
+      const s = String(r.status || 'unknown');
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return counts;
+  }, [returns]);
 
   return (
     <AdminLayout>
-      <TooltipProvider>
-        <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-          >
-            <h1 className="text-3xl font-bold tracking-tight uppercase">Return Management</h1>
-            <p className="text-sm text-muted-foreground mt-1">Review and process customer refund requests with precision.</p>
-          </motion.div>
+      <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-[1400px] mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Returns</h1>
+          <p className="text-sm text-muted-foreground mt-1">Review and process customer return requests.</p>
+        </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.1 }}
-          >
-            <Card className="border-none shadow-2xl shadow-black/5 bg-card/50 backdrop-blur-sm">
-              <CardHeader className="pb-6 border-b border-border/40 space-y-4">
-                <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-11 bg-muted/40 border-border/40" placeholder="Search order number, customer, or comment..." />
-                </div>
-                <div className="flex flex-col lg:flex-row gap-3">
-                  <div className="flex items-center gap-2 overflow-x-auto">
-                    {['all', 'requested', 'approved', 'picked_up', 'refunded', 'rejected'].map((status) => (
-                      <Button key={status} variant={statusFilter === status ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(status)} className="rounded-full px-4 text-xs uppercase font-bold">
-                        {status === 'all' ? 'All Status' : status.replace('_', ' ')}
-                      </Button>
-                    ))}
-                  </div>
-                  <Select value={reasonFilter} onValueChange={setReasonFilter}>
-                    <SelectTrigger className="w-full lg:w-72">
-                      <SelectValue placeholder="Filter by reason" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Reasons</SelectItem>
-                      {RETURN_REASON_OPTIONS.map((reason) => (
-                        <SelectItem key={reason.value} value={reason.value}>
-                          {reason.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardHeader>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="h-80 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary opacity-30" /></div>
-              ) : filteredReturns.length === 0 ? (
-                <div className="text-center py-24 space-y-4"><Undo2 className="h-12 w-12 mx-auto text-muted-foreground opacity-20" /><p className="text-sm text-muted-foreground">No requests found</p></div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/30 text-[10px] uppercase font-bold tracking-widest text-muted-foreground border-b border-border/40">
-                      <tr>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Order / Date</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Customer</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Items</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Amount</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Payment</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Reason</th>
-                        <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
-                        <th className="px-2 py-2 text-right whitespace-nowrap">Actions</th>
-                      </tr>
-                    </thead>
-                    <motion.tbody
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                      className="divide-y divide-border/30"
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.1 }}
+        >
+          <Card className="border-border/60 shadow-lg bg-card/80 backdrop-blur-sm">
+            <div className="p-4 md:p-6 border-b border-border/40 space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 h-11 bg-muted/40 border-border/40"
+                  placeholder="Search order, customer, or comment..."
+                />
+              </div>
+              <div className="flex flex-col lg:flex-row gap-3">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {['all', 'requested', 'approved', 'picked_up', 'refunded', 'rejected'].map((status) => (
+                    <Button
+                      key={status}
+                      variant={statusFilter === status ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setStatusFilter(status)}
+                      className="rounded-full px-3 md:px-4 text-[10px] md:text-xs uppercase font-bold whitespace-nowrap"
                     >
-                      {filteredReturns.map((ret) => (
-                        <motion.tr
-                          key={String(ret.id)}
-                          variants={rowVariants}
-                          className="border-b transition-colors hover:bg-muted/50"
-                        >
-                          <td className="px-2 py-2"><p className="font-bold text-xs whitespace-nowrap">#{String(ret.orders?.order_id || ret.id || '').slice(0, 14)}</p><p className="text-[10px] text-muted-foreground whitespace-nowrap">{ret.created_at ? format(new Date(String(ret.created_at)), 'dd MMM yyyy') : 'Unknown'}</p></td>
-                          <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">{String(ret.profiles?.display_name || 'Anonymous')}</td>
-                          <td className="px-2 py-2">
-                            <div className="space-y-1">
-                              {(ret.items || []).slice(0, 2).map((item) => (
-                                <div key={String(item.id)} className="flex items-center gap-2">
-                                  <ProductImageViewer
-                                    src={String(item.order_items?.product_image || DEFAULT_PRODUCT_IMAGE)}
-                                    alt={String(item.order_items?.product_name || 'Product')}
-                                    className="w-8 h-10 flex-shrink-0"
-                                  />
-                                  <p className="text-xs font-medium truncate max-w-[120px]">{String(item.order_items?.product_name || 'Order Item')}</p>
+                      {status === 'all' ? `All (${statusCounts.all || 0})` : `${status.replace('_', ' ')} (${statusCounts[status] || 0})`}
+                    </Button>
+                  ))}
+                </div>
+                <Select value={reasonFilter} onValueChange={setReasonFilter}>
+                  <SelectTrigger className="w-full lg:w-64 h-11">
+                    <SelectValue placeholder="Filter by reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Reasons</SelectItem>
+                    {RETURN_REASON_OPTIONS.map((reason) => (
+                      <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="p-4 md:p-6">
+              {isLoading ? (
+                <div className="h-80 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary opacity-40" />
+                    <p className="text-sm text-muted-foreground">Loading returns...</p>
+                  </div>
+                </div>
+              ) : filteredReturns.length === 0 ? (
+                <div className="text-center py-16 md:py-24 space-y-4">
+                  <Undo2 className="h-12 w-12 mx-auto text-muted-foreground opacity-20" />
+                  <p className="text-sm text-muted-foreground">No return requests found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredReturns.map((ret) => {
+                    const isExpanded = expandedCards.has(String(ret.id));
+                    const nextAction = getNextAction(ret);
+                    const daysAgo = ret.created_at ? Math.abs(differenceInDays(new Date(ret.created_at), new Date())) : 0;
+
+                    return (
+                      <motion.div
+                        key={String(ret.id)}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-xl border border-border/50 bg-card hover:bg-card/80 transition-all shadow-sm overflow-hidden"
+                      >
+                        <div className="p-4 md:p-5">
+                          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
+                                <p className="font-mono text-xs md:text-sm font-bold text-foreground">
+                                  #{String(ret.orders?.order_id || ret.id || '').slice(0, 16)}
+                                </p>
+                                {getStatusBadge(String(ret.status || ''))}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  {String(ret.profiles?.display_name || 'Anonymous')}
+                                </span>
+                                <span>{formatDate(ret.created_at)}</span>
+                                {daysAgo > 0 && <span>({daysAgo}d ago)</span>}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-3 text-xs"
+                                onClick={() => { toggleExpand(String(ret.id)); }}
+                              >
+                                {isExpanded ? <ChevronDown className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+                                {isExpanded ? 'Less' : 'Details'}
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-3 text-xs"
+                                onClick={() => { setSelectedReturn(ret); setAdminNoteDraft(String(ret.admin_note || '')); }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" />
+                                Full View
+                              </Button>
+
+                              {String(ret.status || '').toLowerCase() === 'requested' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 px-3 text-xs bg-emerald-500 hover:bg-emerald-600"
+                                    onClick={() => updateStatus(ret, 'approved')}
+                                    disabled={updateReturnMutation.isPending}
+                                  >
+                                    <CheckCircle className="mr-1 h-3 w-3" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 px-3 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                    onClick={() => updateStatus(ret, 'rejected')}
+                                    disabled={updateReturnMutation.isPending}
+                                  >
+                                    <XCircle className="mr-1 h-3 w-3" />
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+
+                              {String(ret.status || '').toLowerCase() === 'approved' && (
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3 text-xs bg-orange-500 hover:bg-orange-600"
+                                  onClick={() => updateStatus(ret, 'picked_up')}
+                                  disabled={updateReturnMutation.isPending}
+                                >
+                                  <Package className="mr-1 h-3 w-3" />
+                                  Picked Up
+                                </Button>
+                              )}
+
+                              {String(ret.status || '').toLowerCase() === 'picked_up' && (
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3 text-xs bg-emerald-500 hover:bg-emerald-600"
+                                  onClick={() => processRefund(ret)}
+                                  disabled={updateReturnMutation.isPending}
+                                >
+                                  <CreditCard className="mr-1 h-3 w-3" />
+                                  Refund
+                                </Button>
+                              )}
+
+                              {(String(ret.status || '').toLowerCase() === 'refunded' || String(ret.status || '').toLowerCase() === 'rejected') && (
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase bg-muted/50 px-3 py-1.5 rounded-full border border-border/40">
+                                  <Clock size={12} />
+                                  {String(ret.status || '').toLowerCase() === 'refunded' ? 'Refunded' : 'Rejected'}
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          </td>
-                          <td className="px-2 py-2 text-xs font-bold whitespace-nowrap">{formatPrice(computeRefundTotal(ret))}</td>
-                          <td className="px-2 py-2">
-                            <Badge variant="outline" className="text-[10px] uppercase whitespace-nowrap">
-                              {ret.payment_mode || 'COD'}
-                            </Badge>
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex flex-col gap-1 items-start">
-                              <Badge className={getReturnReasonBadgeClass(String(ret.reason || 'other')) + " text-[10px] whitespace-nowrap"}>{getReturnReasonLabel(String(ret.reason || 'other'))}</Badge>
-                              {ret.comment ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild><p className="text-[10px] text-muted-foreground max-w-[120px] truncate cursor-help">{String(ret.comment)}</p></TooltipTrigger>
-                                  <TooltipContent className="max-w-xs whitespace-pre-wrap">{String(ret.comment)}</TooltipContent>
-                                </Tooltip>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap">{getStatusBadge(String(ret.status || ''))}</td>
-                          <td className="px-2 py-2 text-right">
-                            <div className="flex justify-end flex-wrap gap-1.5 min-w-[160px]">
-                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => { setSelectedReturn(ret); setAdminNoteDraft(String(ret.admin_note || '')); }}><Eye className="mr-1 h-3 w-3" />View</Button>
-                              {ret.status === 'requested' ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateStatus(ret, 'approved')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'approved' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}Approve</Button> : null}
-                              {ret.status === 'requested' ? <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => updateStatus(ret, 'rejected')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'rejected' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XSquare className="mr-1 h-3 w-3" />}Reject</Button> : null}
-                              {ret.status === 'approved' ? <Button size="sm" className="h-7 px-2 text-xs bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(ret, 'picked_up')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'picked_up' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Box className="mr-1 h-3 w-3" />}Picked Up</Button> : null}
-                              {ret.status === 'picked_up' ? <Button size="sm" className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(ret, 'refunded')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(ret.id) && updateReturnMutation.variables?.status === 'refunded' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CreditCard className="mr-1 h-3 w-3" />}Refunded</Button> : null}
-                              {ret.status === 'rejected' || ret.status === 'refunded' ? <div className="text-[9px] font-black text-muted-foreground uppercase bg-muted/40 px-2 py-1 rounded border border-border/40 flex items-center gap-1"><Clock size={10} />Processed</div> : null}
-                            </div>
-                          </td>
-                        </motion.tr>
-                      ))}
-                    </motion.tbody>
-                  </table>
+                          </div>
+
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="mt-4 pt-4 border-t border-border/30"
+                            >
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Items</p>
+                                  <div className="space-y-2">
+                                    {(ret.items || []).slice(0, 3).map((item) => (
+                                      <div key={String(item.id)} className="flex items-center gap-2">
+                                        <ProductImageViewer
+                                          src={String(item.order_items?.product_image || DEFAULT_PRODUCT_IMAGE)}
+                                          alt={String(item.order_items?.product_name || 'Product')}
+                                          className="w-8 h-10 rounded flex-shrink-0"
+                                        />
+                                        <p className="text-xs truncate">{String(item.order_items?.product_name || 'Item')}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Reason</p>
+                                  <Badge className={getReturnReasonBadgeClass(String(ret.reason || 'other')) + " text-[10px]"}>{getReturnReasonLabel(String(ret.reason || 'other'))}</Badge>
+                                  {ret.comment && <p className="text-xs text-muted-foreground mt-1 truncate">{String(ret.comment)}</p>}
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Amount</p>
+                                  <p className="text-lg font-bold text-primary">{formatPrice(computeRefundTotal(ret))}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Payment</p>
+                                  <Badge variant="outline" className="text-[10px] uppercase">{ret.payment_mode || 'COD'}</Badge>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               )}
-            </CardContent>
+            </div>
           </Card>
-          </motion.div>
-        </div>
+        </motion.div>
 
         <Dialog open={!!selectedReturn} onOpenChange={(open) => (!open ? setSelectedReturn(null) : null)}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            {selectedReturn ? (
-              <motion.div
-                variants={modalContentVariants}
-                initial="hidden"
-                animate="visible"
-                className="space-y-4"
-              >
-                <DialogHeader><DialogTitle className="uppercase">Return Request Details</DialogTitle></DialogHeader>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                  <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Order</p><p className="font-bold">#{String(selectedReturn.orders?.order_id || selectedReturn.id || '').slice(0, 16)}</p><p className="text-xs text-muted-foreground mt-2">Customer</p><p>{String(selectedReturn.profiles?.display_name || 'Anonymous')}</p></CardContent></Card>
-                  <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Payment Mode</p><Badge variant="outline" className="uppercase">{selectedReturn.payment_mode || 'COD'}</Badge><p className="text-xs text-muted-foreground mt-2">Refund Amount</p><p className="font-bold text-primary">{formatPrice(computeRefundTotal(selectedReturn))}</p></CardContent></Card>
-                  <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Reason</p><Badge className={getReturnReasonBadgeClass(String(selectedReturn.reason || 'other'))}>{getReturnReasonLabel(String(selectedReturn.reason || 'other'))}</Badge><p className="text-xs text-muted-foreground mt-2">Status</p>{getStatusBadge(String(selectedReturn.status || ''))}</CardContent></Card>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+            {selectedReturn && (
+              <>
+                <div className="sticky top-0 z-10 bg-card border-b border-border/40 px-6 py-4 flex items-center justify-between">
+                  <DialogHeader className="p-0">
+                    <DialogTitle className="text-lg font-bold uppercase tracking-wider">
+                      Return #{String(selectedReturn.orders?.order_id || selectedReturn.id || '').slice(0, 16)}
+                    </DialogTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Submitted {formatDate(selectedReturn.created_at)}
+                    </p>
+                  </DialogHeader>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedReturn(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Comment</p><p className="text-sm whitespace-pre-wrap">{String(selectedReturn.comment || 'No additional comment provided.')}</p></CardContent></Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground mb-3">Products</p>
-                    <div className="space-y-3">
+
+                <div className="p-6 space-y-6">
+                  {/* Status + Timeline */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-3">Return Progress</p>
+                      <ReturnTimeline status={String(selectedReturn.status || '')} />
+                    </div>
+                    <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Card className="border-border/40">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Customer</p>
+                          <p className="font-semibold text-sm">{String(selectedReturn.profiles?.display_name || 'Anonymous')}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border/40">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Payment</p>
+                          <Badge variant="outline" className="uppercase text-[10px]">{selectedReturn.payment_mode || 'COD'}</Badge>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border/40">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Refund Amount</p>
+                          <p className="text-lg font-bold text-primary">{formatPrice(computeRefundTotal(selectedReturn))}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border/40 col-span-2 md:col-span-3">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Reason</p>
+                          <div className="flex items-center gap-2">
+                            <Badge className={getReturnReasonBadgeClass(String(selectedReturn.reason || 'other'))}>{getReturnReasonLabel(String(selectedReturn.reason || 'other'))}</Badge>
+                            <span>{getStatusBadge(String(selectedReturn.status || ''))}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Comment */}
+                  {selectedReturn.comment && (
+                    <>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Customer Comment</p>
+                        <div className="p-4 rounded-xl bg-muted/30 border border-border/40">
+                          <p className="text-sm whitespace-pre-wrap">{String(selectedReturn.comment)}</p>
+                        </div>
+                      </div>
+                      <Separator />
+                    </>
+                  )}
+
+                  {/* Products */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-3">
+                      Items to Return ({selectedReturn.items?.length || 0})
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {(selectedReturn.items || []).map((item) => (
-                        <div key={String(item.id)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                        <div key={String(item.id)} className="flex items-center gap-3 p-3 rounded-xl border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors">
                           <ProductImageViewer
                             src={String(item.order_items?.product_image || DEFAULT_PRODUCT_IMAGE)}
                             alt={String(item.order_items?.product_name || 'Product')}
-                            className="w-16 h-20 flex-shrink-0"
+                            className="w-14 h-18 rounded-lg flex-shrink-0"
                           />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold truncate">{String(item.order_items?.product_name || 'Order Item')}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Quantity: {Number(item.quantity || 0)}</p>
-                            <p className="text-xs font-bold text-primary mt-1">{formatPrice(Number(item.order_items?.unit_price || 0))}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Qty: {Number(item.quantity || 0)}</p>
+                            <p className="text-sm font-bold text-primary mt-0.5">{formatPrice(Number(item.order_items?.unit_price || 0))}</p>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground mb-3">Proof Images</p>{parseImageUrls(selectedReturn.images).length ? <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{parseImageUrls(selectedReturn.images).map((url, idx) => <ProductImageViewer key={url} src={url} alt={`Proof ${idx + 1}`} className="h-32 w-full" />)}</div> : <p className="text-sm text-muted-foreground">No images uploaded.</p>}</CardContent></Card>
-                <Card><CardContent className="p-4 space-y-2"><p className="text-xs text-muted-foreground">Internal Admin Note</p><Textarea value={adminNoteDraft} onChange={(e) => setAdminNoteDraft(e.target.value)} placeholder="Private note..." /><div className="flex justify-end"><Button size="sm" variant="outline" onClick={() => updateReturnMutation.mutate({ id: String(selectedReturn.id), admin_note: adminNoteDraft.trim() ? adminNoteDraft.trim() : null })}>Save Note</Button></div></CardContent></Card>
-                <div className="flex flex-wrap justify-end gap-2">
-                  {selectedReturn.status === 'requested' ? <Button onClick={() => updateStatus(selectedReturn, 'approved')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'approved' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Approve</Button> : null}
-                  {selectedReturn.status === 'requested' ? <Button variant="destructive" onClick={() => updateStatus(selectedReturn, 'rejected')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'rejected' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Reject</Button> : null}
-                  {selectedReturn.status === 'approved' ? <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => updateStatus(selectedReturn, 'picked_up')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'picked_up' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Picked Up</Button> : null}
-                  {selectedReturn.status === 'picked_up' ? <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => updateStatus(selectedReturn, 'refunded')} disabled={updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id)}>{updateReturnMutation.isPending && updateReturnMutation.variables?.id === String(selectedReturn.id) && updateReturnMutation.variables?.status === 'refunded' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mark Refunded</Button> : null}
+                  </div>
+
+                  <Separator />
+
+                  {/* Proof Images */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-3">Proof Images</p>
+                    {parseImageUrls(selectedReturn.images).length > 0 ? (
+                      <ScrollArea className="w-full">
+                        <div className="flex gap-3 pb-2">
+                          {parseImageUrls(selectedReturn.images).map((url, idx) => (
+                            <ProductImageViewer
+                              key={url}
+                              src={url}
+                              alt={`Proof ${idx + 1}`}
+                              className="h-28 w-28 md:h-36 md:w-36 flex-shrink-0 rounded-xl"
+                            />
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No images provided by customer.</p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Admin Note */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Internal Note</p>
+                    <Textarea
+                      value={adminNoteDraft}
+                      onChange={(e) => setAdminNoteDraft(e.target.value)}
+                      placeholder="Add a private note about this return..."
+                      className="min-h-[80px] bg-muted/20 border-border/40"
+                    />
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateReturnMutation.mutate({ id: String(selectedReturn.id), admin_note: adminNoteDraft.trim() || null })}
+                        disabled={updateReturnMutation.isPending}
+                      >
+                        {updateReturnMutation.isPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                        Save Note
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap justify-end gap-3">
+                    {String(selectedReturn.status || '').toLowerCase() === 'requested' && (
+                      <>
+                        <Button
+                          className="bg-emerald-500 hover:bg-emerald-600 min-w-[120px]"
+                          onClick={() => { updateStatus(selectedReturn, 'approved'); }}
+                          disabled={updateReturnMutation.isPending}
+                        >
+                          {updateReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                          Approve
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          className="min-w-[120px]"
+                          onClick={() => { updateStatus(selectedReturn, 'rejected'); }}
+                          disabled={updateReturnMutation.isPending}
+                        >
+                          {updateReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    {String(selectedReturn.status || '').toLowerCase() === 'approved' && (
+                      <Button
+                        className="bg-orange-500 hover:bg-orange-600 min-w-[160px]"
+                        onClick={() => { updateStatus(selectedReturn, 'picked_up'); }}
+                        disabled={updateReturnMutation.isPending}
+                      >
+                        {updateReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Package className="mr-2 h-4 w-4" />}
+                        Mark Picked Up
+                      </Button>
+                    )}
+                    {String(selectedReturn.status || '').toLowerCase() === 'picked_up' && (
+                      <Button
+                        className="bg-emerald-500 hover:bg-emerald-600 min-w-[160px]"
+                        onClick={() => processRefund(selectedReturn)}
+                        disabled={updateReturnMutation.isPending}
+                      >
+                        {updateReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                        Process Refund
+                      </Button>
+                    )}
+                    {(String(selectedReturn.status || '').toLowerCase() === 'refunded' || String(selectedReturn.status || '').toLowerCase() === 'rejected') && (
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted/40 border border-border/40">
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {String(selectedReturn.status || '').toLowerCase() === 'refunded' ? 'Refund Completed' : 'Request Rejected'}
+                        </span>
+                      </div>
+                    )}
+                    {updateReturnMutation.isPending && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </motion.div>
-            ) : null}
+              </>
+            )}
           </DialogContent>
         </Dialog>
-      </TooltipProvider>
+      </div>
     </AdminLayout>
   );
 };

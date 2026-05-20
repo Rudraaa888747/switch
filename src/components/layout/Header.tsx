@@ -173,9 +173,7 @@ const Header = () => {
 
               <motion.button
                 onClick={openDrawer}
-                className={`relative touch-target rounded-full border ${
-                  isHome && !scrolled ? 'border-white/15 bg-black/18 text-white' : 'border-border/60 bg-background/72 text-foreground'
-                }`}
+                className="relative touch-target rounded-full"
                 aria-label="Cart"
                 whileHover={{ scale: 1.05, opacity: 1 }}
                 whileTap={{ scale: 0.92 }}

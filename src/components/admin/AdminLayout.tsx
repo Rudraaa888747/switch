@@ -232,10 +232,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                 <Search size={17} />
               </button>
 
-              <span className="touch-target rounded-full border border-border/70 bg-background/70 text-muted-foreground" title="Dark mode locked">
-                <span className="h-2.5 w-2.5 rounded-full bg-foreground/75" />
-              </span>
-
               <div className="relative" ref={notifRef}>
                 <button onClick={() => setShowNotifications((value) => !value)} className="touch-target relative rounded-full border border-border/70 bg-background/70 text-muted-foreground transition-colors hover:text-foreground" title="Notifications">
                   <Bell size={17} />

@@ -247,7 +247,7 @@ const normalizeModernOrder = (record: AnyOrderRecord): NormalizedOrderRecord[] =
     order_date: toOptionalString(record.order_date) || toOptionalString(record.created_at),
     status: normalizeOrderStatus(record.delivery_status || record.status),
     estimated_delivery_date:
-      toOptionalString(record.estimated_delivery_date) || toOptionalString(record.estimated_delivery),
+      toOptionalString(record.estimated_delivery_date) || toOptionalString(record.estimated_delivery_at) || toOptionalString(record.estimated_delivery),
     cancelled_at: toOptionalString(record.cancelled_at),
     created_at: toOptionalString(record.created_at),
   }));

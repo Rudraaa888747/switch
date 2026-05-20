@@ -98,7 +98,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
                 <motion.img
                   src={imageUrl}
                   alt={product.name}
-                  className="image-fade h-full w-full object-contain p-2"
+                  className="image-fade h-full w-full object-cover object-top"
                   data-loaded={imageLoaded}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 1.02 }}

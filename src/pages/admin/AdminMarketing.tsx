@@ -282,20 +282,34 @@ const AdminMarketing = () => {
         c.id === editingCoupon.id ? { ...c, ...couponForm } : c
       );
       persistCoupons(next);
-      supabase.from('coupons').update(mapUiCouponToDb(couponForm)).eq('id', editingCoupon.id).then(() => {}).catch(() => {});
-      toast({ title: 'Coupon Updated', description: `Coupon ${couponForm.code} has been updated.` });
+      supabase.from('coupons').update(mapUiCouponToDb(couponForm)).eq('id', editingCoupon.id)
+        .then(({ error }) => {
+          if (error) throw error;
+          toast({ title: 'Coupon Updated', description: `Coupon ${couponForm.code} has been updated.` });
+        })
+        .catch((err) => {
+          console.error(err);
+          toast({ title: 'Database Error', description: 'Failed to update coupon in database. Please run migrations.', variant: 'destructive' });
+        });
     } else {
       const coupon: Coupon = { id: genId(), ...couponForm };
       persistCoupons([...coupons, coupon]);
-      supabase.from('coupons').insert(mapUiCouponToDb(couponForm)).then(() => {}).catch(() => {});
-      createAdminNotification({
-        title: 'Coupon created',
-        message: `${couponForm.code.trim().toUpperCase()} is now available to shoppers.`,
-        type: 'success',
-        eventType: 'coupon_created',
-        link: '/admin/marketing',
-      }).catch(() => {});
-      toast({ title: 'Coupon Added', description: `Coupon ${couponForm.code} has been created.` });
+      supabase.from('coupons').insert(mapUiCouponToDb(couponForm))
+        .then(({ error }) => {
+          if (error) throw error;
+          createAdminNotification({
+            title: 'Coupon created',
+            message: `${couponForm.code.trim().toUpperCase()} is now available to shoppers.`,
+            type: 'success',
+            eventType: 'coupon_created',
+            link: '/admin/marketing',
+          }).catch(() => {});
+          toast({ title: 'Coupon Added', description: `Coupon ${couponForm.code} has been created.` });
+        })
+        .catch((err) => {
+          console.error(err);
+          toast({ title: 'Database Error', description: 'Failed to save coupon to database. Please run migrations.', variant: 'destructive' });
+        });
     }
     setShowCouponModal(false);
     setEditingCoupon(null);

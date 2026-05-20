@@ -99,12 +99,19 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
     }
 
     try {
-      const { data, error: fetchError } = await supabase
+      const fetchPromise = supabase
         .from('coupons')
         .select('*')
         .eq('code', key)
         .eq('is_active', true)
         .maybeSingle();
+
+      const { data, error: fetchError } = await Promise.race([
+        fetchPromise,
+        new Promise<{ data: any; error: any }>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timed out')), 8000)
+        )
+      ]);
 
       if (fetchError) throw fetchError;
 
@@ -151,9 +158,18 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
         title: 'Promo code applied!',
         description: `You saved ₹${discount.toLocaleString('en-IN')}`,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error applying coupon:', err);
-      setError('Failed to apply promo code');
+      
+      if (err?.message?.includes('Request timed out')) {
+        setError('Connection timed out. Please try again.');
+        toast({ title: 'Connection Error', description: 'Request timed out while verifying coupon.', variant: 'destructive' });
+      } else if (err?.code === '42P01' || err?.message?.includes('relation "public.coupons" does not exist')) {
+        setError('Coupons not configured on server.');
+        toast({ title: 'Database Error', description: 'Coupons table missing. Please run database migrations.', variant: 'destructive' });
+      } else {
+        setError('Failed to apply promo code');
+      }
     } finally {
       setIsLoading(false);
     }

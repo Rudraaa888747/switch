@@ -261,30 +261,53 @@ const Checkout = () => {
         color: item.color,
       }));
 
-      const { data: rpcResult, error: rpcError } = await withTimeout(
-        supabase.rpc('place_order_v2', {
-          p_order_id: newOrderId,
-          p_user_id: currentUserId,
-          p_status: 'processing',
-          p_estimated_delivery: dateOnly,
-          p_subtotal: totalPrice - couponDiscount,
-          p_tax: tax,
-          p_shipping: shipping,
-          p_total: grandTotal,
-          p_items: itemsPayload,
-          p_customer_name: addressForm.fullName,
-          p_customer_email: addressForm.email || null,
-          p_customer_phone: addressForm.phone,
-          p_shipping_address: addressForm.address,
-          p_shipping_city: addressForm.city,
-          p_shipping_state: addressForm.state,
-          p_shipping_pincode: addressForm.pincode,
-          p_payment_method: finalPaymentMethod,
-          p_wallet_amount: walletApplied,
-          p_coupon_code: appliedCoupon?.code || null,
-        }),
+      const rpcArgs: any = {
+        p_order_id: newOrderId,
+        p_user_id: currentUserId,
+        p_status: 'processing',
+        p_estimated_delivery: dateOnly,
+        p_subtotal: totalPrice - couponDiscount,
+        p_tax: tax,
+        p_shipping: shipping,
+        p_total: grandTotal,
+        p_items: itemsPayload,
+        p_customer_name: addressForm.fullName,
+        p_customer_email: addressForm.email || null,
+        p_customer_phone: addressForm.phone,
+        p_shipping_address: addressForm.address,
+        p_shipping_city: addressForm.city,
+        p_shipping_state: addressForm.state,
+        p_shipping_pincode: addressForm.pincode,
+        p_payment_method: finalPaymentMethod,
+      };
+
+      if (walletApplied !== undefined) {
+        rpcArgs.p_wallet_amount = walletApplied;
+      }
+      if (appliedCoupon?.code) {
+        rpcArgs.p_coupon_code = appliedCoupon.code;
+      }
+
+      let rpcResult, rpcError;
+      const res = await withTimeout(
+        supabase.rpc('place_order_v2', rpcArgs),
         'Order placement timed out',
       );
+
+      if (res.error && res.error.message.includes('Could not find the function')) {
+        // Fallback for older schema caches
+        delete rpcArgs.p_coupon_code;
+        delete rpcArgs.p_wallet_amount;
+        const fallbackRes = await withTimeout(
+          supabase.rpc('place_order_v2', rpcArgs),
+          'Order placement timed out',
+        );
+        rpcResult = fallbackRes.data;
+        rpcError = fallbackRes.error;
+      } else {
+        rpcResult = res.data;
+        rpcError = res.error;
+      }
 
       if (rpcError) throw rpcError;
 
@@ -293,7 +316,7 @@ const Checkout = () => {
         throw new Error(parsed?.error || 'Failed to place order via server');
       }
 
-      await createAdminNotification({
+      createAdminNotification({
         title: 'New order received',
         message: `${addressForm.fullName} placed ${newOrderId} for ${formatPrice(grandTotal)}.`,
         type: 'info',

@@ -75,10 +75,17 @@ const buildOrderUpdatePayload = ({
 }) => {
   const payload: Record<string, unknown> = { status };
 
-  if (schemaVersion === 'modern') {
-    payload.estimated_delivery_at = estimatedDelivery ? `${estimatedDelivery}T00:00:00.000Z` : null;
-  } else if (estimatedDelivery) {
-    payload.estimated_delivery = estimatedDelivery;
+  if (estimatedDelivery) {
+    payload.estimated_delivery_date = estimatedDelivery;
+    if (schemaVersion === 'modern') {
+      payload.estimated_delivery_at = `${estimatedDelivery}T00:00:00.000Z`;
+    } else {
+      payload.estimated_delivery = estimatedDelivery;
+    }
+  } else {
+    payload.estimated_delivery_date = null;
+    payload.estimated_delivery_at = null;
+    payload.estimated_delivery = null;
   }
 
   return payload;
@@ -656,12 +663,14 @@ const AdminOrders = () => {
                                       </label>
                                       <div className="relative">
                                         <input
+                                          key={order.id + (order.estimated_delivery_date || '')}
                                           type="date"
                                           className="flex h-10 w-full rounded-lg border border-input bg-background/50 px-3 py-1 text-sm shadow-sm transition-all focus-within:ring-1 focus-within:ring-primary hover:bg-muted/10 outline-none"
-                                          defaultValue={order.estimated_delivery_date || ''}
+                                          defaultValue={order.estimated_delivery_date ? order.estimated_delivery_date.split('T')[0] : ''}
                                           onBlur={(event) => {
-                                            if (event.target.value !== order.estimated_delivery_date) {
-                                              updateOrderStatus(order, order.status, event.target.value);
+                                            const val = event.target.value;
+                                            if (val && val !== (order.estimated_delivery_date ? order.estimated_delivery_date.split('T')[0] : '')) {
+                                              updateOrderStatus(order, order.status, val);
                                             }
                                           }}
                                         />
