@@ -261,7 +261,7 @@ const Checkout = () => {
         color: item.color,
       }));
 
-      const rpcArgs: any = {
+      const rpcArgs: Record<string, unknown> = {
         p_order_id: newOrderId,
         p_user_id: currentUserId,
         p_status: 'processing',

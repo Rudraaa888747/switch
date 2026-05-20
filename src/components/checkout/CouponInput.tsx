@@ -108,7 +108,7 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
 
       const { data, error: fetchError } = await Promise.race([
         fetchPromise,
-        new Promise<{ data: any; error: any }>((_, reject) => 
+        new Promise<{ data: unknown; error: unknown }>((_, reject) => 
           setTimeout(() => reject(new Error('Request timed out')), 8000)
         )
       ]);
@@ -158,13 +158,14 @@ const CouponInput = ({ subtotal, onApplyCoupon, isAuthenticated }: CouponInputPr
         title: 'Promo code applied!',
         description: `You saved ₹${discount.toLocaleString('en-IN')}`,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error applying coupon:', err);
-      
-      if (err?.message?.includes('Request timed out')) {
+      const error = err as { message?: string; code?: string };
+
+      if (error?.message?.includes('Request timed out')) {
         setError('Connection timed out. Please try again.');
         toast({ title: 'Connection Error', description: 'Request timed out while verifying coupon.', variant: 'destructive' });
-      } else if (err?.code === '42P01' || err?.message?.includes('relation "public.coupons" does not exist')) {
+      } else if (error?.code === '42P01' || error?.message?.includes('relation "public.coupons" does not exist')) {
         setError('Coupons not configured on server.');
         toast({ title: 'Database Error', description: 'Coupons table missing. Please run database migrations.', variant: 'destructive' });
       } else {

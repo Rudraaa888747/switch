@@ -1300,7 +1300,7 @@ set search_path = public
 as $$
   select
     o.id,
-    o.order_id,
+    COALESCE(o.order_id, o.order_number) AS order_id,
     o.user_id,
     o.customer_name,
     o.customer_phone,
@@ -1324,7 +1324,7 @@ as $$
     (p_status is null or o.status = p_status)
     and (
       p_search is null
-      or o.order_id ilike '%' || p_search || '%'
+      or COALESCE(o.order_id, o.order_number) ilike '%' || p_search || '%'
       or o.customer_name ilike '%' || p_search || '%'
     )
   order by o.created_at desc
