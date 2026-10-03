@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -26,9 +26,28 @@ const PerformanceObserver = () => {
 
 import { useGlobalRealtime } from "./hooks/useGlobalRealtime";
 
-const RealtimeObserver = () => {
-  useGlobalRealtime();
+// Storefront-only realtime: admin pages have their own channels
+// (admin-notifications). Skipping global products/orders/reviews sync on
+// /admin/* saves websockets + refetch storms on dashboard.
+const StorefrontRealtime = () => {
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith("/admin");
+  useGlobalRealtime(!isAdmin);
   return null;
+};
+
+// Storefront-only overlays — never mount chat/cart/welcome on admin
+// (saves lazy chunks + Supabase fetches on dashboard).
+const StorefrontOverlays = () => {
+  const location = useLocation();
+  if (location.pathname.startsWith("/admin")) return null;
+  return (
+    <>
+      <WelcomePopup />
+      <FloatingChatWidget />
+      <CartDrawer />
+    </>
+  );
 };
 
 import { useEffect } from "react";
@@ -140,7 +159,6 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <PerformanceObserver />
-        <RealtimeObserver />
         <OfflineObserver />
         <AuthProvider>
           <AdminProvider>
@@ -151,6 +169,7 @@ const App = () => (
                   <Sonner />
                   <BrowserRouter>
                     <ScrollToTop />
+                    <StorefrontRealtime />
                     <Suspense fallback={<PageSkeleton />}>
                       <Routes>
                         {/* ── Public routes ── */}
@@ -209,10 +228,8 @@ const App = () => (
                         </Route>
                       </Routes>
 
-                      {/* Global overlays — not rendered on admin pages by design */}
-                      <WelcomePopup />
-                      <FloatingChatWidget />
-                      <CartDrawer />
+                      {/* Global overlays — storefront only */}
+                      <StorefrontOverlays />
                     </Suspense>
                   </BrowserRouter>
                 </TooltipProvider>
