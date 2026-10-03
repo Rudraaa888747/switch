@@ -81,7 +81,9 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       accPath += `/${segment}`;
       const isLast = index === segments.length - 1;
       const label = pathToLabel[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
-      crumbs.push({ label, path: accPath, isLast });
+      // '/admin' alone is a redirect route — point its crumb at the dashboard directly.
+      const path = accPath === '/admin' ? '/admin/dashboard' : accPath;
+      crumbs.push({ label, path, isLast });
     });
     return crumbs;
   }, [location.pathname]);
@@ -291,7 +293,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                               key={notification.id}
                               onClick={() => {
                                 markNotificationRead(notification.id);
-                                if (notification.link) {
+                                // Links come from DB rows — only follow internal admin paths.
+                                if (notification.link && notification.link.startsWith('/admin/')) {
                                   navigate(notification.link);
                                   setShowNotifications(false);
                                 }
