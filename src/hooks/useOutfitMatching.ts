@@ -63,11 +63,15 @@ export const useOutfitMatching = () => {
       return matchingProducts.length > 0 ? matchingProducts : getFallbackMatches(selectedProduct, products);
     } catch (error) {
       console.error('Outfit matching error:', error);
+      toast({
+        title: 'AI unavailable',
+        description: 'Showing basic matches instead of AI-curated picks.',
+      });
       const { data: allProducts } = await supabase
         .from('products')
         .select('*')
         .limit(200);
-      return getFallbackMatches(selectedProduct, allProducts || []);
+      return getFallbackMatches(selectedProduct, (allProducts as Product[]) || []);
     } finally {
       setIsMatching(false);
     }

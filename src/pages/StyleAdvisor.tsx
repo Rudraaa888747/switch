@@ -7,6 +7,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { useStyleAnalysis, AnalysisResult } from '@/hooks/useStyleAnalysis';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 /* ─────────────────────────────────────────────
    Color-matching helpers (preserved logic)
@@ -418,8 +419,17 @@ const StyleAdvisor = () => {
       if (!uploadError && uploadData) {
         const { data: { publicUrl } } = supabase.storage.from('style-uploads').getPublicUrl(filePath);
         setStoredImageUrl(publicUrl);
+      } else if (uploadError) {
+        throw uploadError;
       }
-    } catch (err) { console.warn('Storage upload skipped:', err); }
+    } catch (err) {
+      console.warn('Storage upload skipped:', err);
+      toast({
+        title: 'Photo not saved',
+        description: "Analysis continues, but the photo won't be stored.",
+        variant: 'destructive',
+      });
+    }
   }, [user]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -463,11 +473,19 @@ const StyleAdvisor = () => {
       setAnalysisResult(result);
       if (user) {
         try {
-          await supabase.from('profiles').update({
+          const { error: profileError } = await supabase.from('profiles').update({
             skin_tone: result.skinTone, body_structure: result.bodyStructure,
             style_category: result.styleCategory, color_palette: result.colorPalette,
           }).eq('user_id', user.id);
-        } catch (error) { console.error('Profile update error:', error); }
+          if (profileError) throw profileError;
+        } catch (error) {
+          console.error('Profile update error:', error);
+          toast({
+            title: 'Preferences not saved',
+            description: 'Your style picks may reset next visit.',
+            variant: 'destructive',
+          });
+        }
       }
     }
   }, [image, storedImageUrl, user, analyzeImage]);

@@ -46,6 +46,7 @@ export const useAIChat = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = '';
+      let receivedAny = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -62,10 +63,21 @@ export const useAIChat = () => {
             try {
               const parsed = JSON.parse(jsonStr);
               const content = parsed.choices?.[0]?.delta?.content || parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (content) onDelta(content);
-            } catch (e) { /* ignore */ }
+              if (content) {
+                receivedAny = true;
+                onDelta(content);
+              }
+            } catch {
+              // Skip the corrupt chunk and keep streaming the rest.
+            }
           }
         }
+      }
+
+      // A stream of nothing but corrupt chunks used to look like the AI
+      // just stopped. Surface it as an error instead.
+      if (!receivedAny) {
+        throw new Error('Empty AI response');
       }
 
       onDone();
