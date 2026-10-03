@@ -39,7 +39,7 @@ const statCardVariants = {
 };
 
 const AdminDashboard = () => {
-  const { data, isLoading } = useAdminOverview();
+  const { data, isLoading, isError, refetch } = useAdminOverview();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useAdmin();
   const [activeChart, setActiveChart] = useState<'revenue' | 'profit'>('revenue');
@@ -128,6 +128,21 @@ const AdminDashboard = () => {
               <span className="font-semibold text-indigo-600 dark:text-indigo-400">Demo Environment Active:</span>
               <span className="text-muted-foreground ml-1">Changes are not persisted to the database. Some actions are visually simulated for presentation.</span>
             </div>
+          </div>
+        )}
+        {isError && !isLoading && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 flex items-center gap-3">
+            <AlertTriangle className="text-destructive w-5 h-5 shrink-0" />
+            <div className="text-sm flex-1">
+              <span className="font-semibold">Couldn&apos;t load dashboard data.</span>
+              <span className="text-muted-foreground ml-1">Numbers below may be incomplete.</span>
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+            >
+              Try again
+            </button>
           </div>
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -311,6 +326,11 @@ const AdminDashboard = () => {
               ) : isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                </div>
+              ) : isError ? (
+                <div className="py-8 text-center">
+                  <ShoppingCart size={32} className="mx-auto mb-2 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">Orders couldn&apos;t load</p>
                 </div>
               ) : (
                 <div className="py-8 text-center">
