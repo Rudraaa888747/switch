@@ -44,7 +44,8 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
     previousUserId.current = userId;
     setSynced(false);
     initialLoadDone.current = false;
-    if (priorUserId && userId && priorUserId !== userId) setItems([]);
+    // Clear on account switch AND logout (prior -> null). Guests untouched.
+    if (priorUserId && priorUserId !== userId) setItems([]);
   }, [isAuthenticated, user?.id]);
 
   // Load from Supabase on auth — merge server IDs with local Product objects

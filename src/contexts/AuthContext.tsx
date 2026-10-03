@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { AuthError, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchUserOrders, getUserOrdersQueryKey } from '@/hooks/useOrders';
+import { clearLocalUserData } from '@/lib/clearUserData';
 
 export interface Address {
   id: string;
@@ -407,6 +408,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setSupabaseUser(null);
     setSession(null);
+    // Drop per-user device state + server cache so the next guest/account
+    // never inherits this account's bag, wishlist, orders, or wallet.
+    clearLocalUserData();
+    queryClient.removeQueries();
 
     try {
       // Sign out from Supabase (global scope to invalidate all sessions)

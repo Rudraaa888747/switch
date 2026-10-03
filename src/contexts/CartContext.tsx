@@ -49,8 +49,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncQueue = useRef<Promise<void>>(Promise.resolve());
   const syncRevision = useRef(0);
 
-  // A cart belongs to an account. Never let a previous account's in-memory cart
-  // sync before the next account has loaded its own server cart.
+  // A cart belongs to an account. Clear on account switch AND on logout
+  // (prior -> null) so the next guest/account never inherits this bag.
+  // Guests (always null) are untouched.
   useEffect(() => {
     const userId = isAuthenticated && user ? user.id : null;
     if (previousUserId.current === userId) return;
@@ -60,7 +61,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     syncRevision.current += 1;
     setSynced(false);
 
-    if (priorUserId && userId && priorUserId !== userId) {
+    if (priorUserId && priorUserId !== userId) {
       setItems([]);
     }
   }, [isAuthenticated, user?.id]);

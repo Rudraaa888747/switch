@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { isDemoMode } from '@/hooks/useDemoMode';
+import { clearLocalUserData } from '@/lib/clearUserData';
 import {
   fetchAdminNotifications,
   markAdminNotificationRead,
@@ -385,10 +386,11 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
     setAdminRole('support'); // Reset to lowest privilege — not 'super_admin'
     setAdminAvatar(null);
     setNotifications([]);
+    // Same per-user device cleanup as store logout — the hard reload after
+    // admin logout clears memory, but localStorage needs explicit clearing
+    // or the next guest inherits this admin's bag/wishlist.
+    clearLocalUserData();
     try {
-      sessionStorage.removeItem('admin_session');
-      // Demo bypass has no supabase session — clear local demo user too
-      // so admin logout fully exits (prevents instant re-login loop).
       if (isDemoMode) {
         const raw = localStorage.getItem('switch_user');
         if (raw) {
