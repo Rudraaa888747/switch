@@ -314,6 +314,7 @@ const AdminMarketing = () => {
         });
         return;
       }
+      const prev = coupons;
       persistCoupons(next);
       supabase.from('coupons').update(mapUiCouponToDb(couponForm)).eq('id', editingCoupon.id)
         .then(({ error }) => {
@@ -322,7 +323,8 @@ const AdminMarketing = () => {
         })
         .catch((err) => {
           console.error('Coupon DB sync failed:', err);
-          toast({ title: 'Coupon Updated (Local)', description: `Coupon ${couponForm.code} has been updated locally.` });
+          persistCoupons(prev);
+          toast({ title: 'Update failed', description: 'Coupon could not be saved. Please try again.', variant: 'destructive' });
         });
     } else {
       const coupon: Coupon = { id: genId(), ...couponForm };
@@ -335,6 +337,7 @@ const AdminMarketing = () => {
         });
         return;
       }
+      const prev = coupons;
       persistCoupons([...coupons, coupon]);
       supabase.from('coupons').insert(mapUiCouponToDb(couponForm))
         .then(({ error }) => {
@@ -350,7 +353,8 @@ const AdminMarketing = () => {
         })
         .catch((err) => {
           console.error('Coupon DB sync failed:', err);
-          toast({ title: 'Coupon Added (Local)', description: `Coupon ${couponForm.code} has been created locally.` });
+          persistCoupons(prev);
+          toast({ title: 'Create failed', description: 'Coupon could not be saved. Please try again.', variant: 'destructive' });
         });
     }
     if (!isDemoMode) {
