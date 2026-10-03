@@ -239,20 +239,24 @@ const Checkout = () => {
     }
   });
 
+  const addressFormRef2 = useRef(addressForm);
+  addressFormRef2.current = addressForm;
+
   useEffect(() => {
     if (isAuthReady && !isAuthenticated) {
       toast({
         title: 'Authentication Required',
         description: 'Please log in to proceed with checkout.',
       });
-      if (addressForm.fullName || addressForm.address || addressForm.email) {
-        sessionStorage.setItem('checkout_address', JSON.stringify(addressForm));
+      const latest = addressFormRef2.current;
+      if (latest.fullName || latest.address || latest.email) {
+        sessionStorage.setItem('checkout_address', JSON.stringify(latest));
       }
       setCurrentStep('address');
       closeDrawer();
       navigate('/auth?returnTo=/checkout', { replace: true });
     }
-  }, [isAuthReady, isAuthenticated, navigate, addressForm, closeDrawer]);
+  }, [isAuthReady, isAuthenticated, navigate, closeDrawer]);
 
   useEffect(() => {
     const savedAddress = sessionStorage.getItem('checkout_address');
