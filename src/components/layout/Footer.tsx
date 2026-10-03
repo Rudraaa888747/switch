@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Twitter, Mail, Phone, MapPin, ArrowRight, ArrowUp, Instagram, Facebook, Youtube } from 'lucide-react';
+import { Mail, Phone, MapPin, ArrowRight, ArrowUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 
@@ -24,13 +24,6 @@ const CUSTOMER_CARE = [
   { label: 'Track Order', to: '/orders' },
   { label: 'Shipping & Returns', to: '/orders' },
   { label: 'Size Guide', to: '/size-guide' },
-];
-
-const SOCIAL = [
-  { icon: Instagram, href: '#' },
-  { icon: Twitter, href: '#' },
-  { icon: Facebook, href: '#' },
-  { icon: Youtube, href: '#' },
 ];
 
 /* ── main ── */
@@ -267,15 +260,6 @@ const Footer = () => {
                 <MapPin size={13} className="swf-contact-icon" />
                 123 SG Highway, Ahmedabad
               </span>
-            </div>
-            
-            {/* Social Icons */}
-            <div className="flex items-center gap-4 mt-8">
-              {SOCIAL.map((social, i) => (
-                <a key={i} href={social.href} className="text-muted-foreground hover:text-foreground transition-colors duration-300">
-                  <social.icon size={16} strokeWidth={1.5} />
-                </a>
-              ))}
             </div>
           </div>
 
