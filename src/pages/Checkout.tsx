@@ -357,9 +357,46 @@ const Checkout = () => {
       return;
     }
 
-    const attemptKey = idempotencyKey || crypto.randomUUID();
+    // Bind the idempotency key to this exact cart+order. Reusing a stale key
+    // for a *different* cart would replay the old order (wrong items/total
+    // on the confirmation screen). Same contents -> same key (safe retry);
+    // changed contents or legacy plain-string key -> fresh key.
+    const cartSig = JSON.stringify({
+      items: itemsPayload,
+      name: addressForm.fullName,
+      email: addressForm.email,
+      phone: addressForm.phone,
+      address: addressForm.address,
+      city: addressForm.city,
+      state: addressForm.state,
+      pincode: addressForm.pincode,
+      pay: paymentMethod,
+      coupon: appliedCoupon?.code || null,
+      wallet: useWallet && !!currentUserId,
+    });
+    // Reuse the stored key ONLY when it was minted for these exact contents
+    // (safe retry). Anything else — changed cart, legacy plain-string key,
+    // missing/unreadable storage — mints a fresh key. Never reuse blindly:
+    // a stale key would replay the old order for a different cart.
+    let attemptKey: string | null = null;
+    try {
+      const storedRaw = sessionStorage.getItem('checkout_idempotency_key');
+      if (storedRaw) {
+        try {
+          const stored = JSON.parse(storedRaw) as { key?: string; sig?: string };
+          if (stored?.key && stored.sig === cartSig) {
+            attemptKey = stored.key;
+          }
+        } catch {
+          // Legacy plain-string key from before cart-binding — never reuse.
+        }
+      }
+    } catch { /* storage unavailable */ }
+    attemptKey = attemptKey || crypto.randomUUID();
     setIdempotencyKey(attemptKey);
-    sessionStorage.setItem('checkout_idempotency_key', attemptKey);
+    try {
+      sessionStorage.setItem('checkout_idempotency_key', JSON.stringify({ key: attemptKey, sig: cartSig }));
+    } catch { /* ignore */ }
     setIsProcessing(true);
 
     try {
