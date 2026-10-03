@@ -6,8 +6,9 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
-    host: "::",
+    host: "localhost",
     port: 8080,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://localhost:5000",
