@@ -183,10 +183,10 @@ const Checkout = () => {
       .from('profiles')
       .select('wallet_balance')
       .eq('user_id', uid)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
-        if (data != null && typeof data.wallet_balance === 'number') {
-          setLiveWalletBalance(data.wallet_balance);
+        if (data != null && typeof (data as { wallet_balance?: unknown }).wallet_balance === 'number') {
+          setLiveWalletBalance((data as { wallet_balance: number }).wallet_balance);
         }
       })
       .catch(() => { /* fall back to cached value */ });

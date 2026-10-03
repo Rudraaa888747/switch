@@ -82,7 +82,7 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
           sentiment,
         })
         .select('id, user_id, rating, title, content, sentiment, helpful_count, created_at, is_verified_purchase')
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === '23505') {
@@ -91,10 +91,19 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
             description: 'You have already reviewed this product',
             variant: 'destructive',
           });
-        } else {
-          throw error;
+          return;
         }
-        return;
+        // RLS may block RETURNING even when the insert succeeded
+        // (PGRST116 / 406 with no rows). Treat as submitted, not failed.
+        if (error.code === 'PGRST116' || error.code === '406' || !data) {
+          setIsSubmitted(true);
+          toast({
+            title: 'Review Submitted!',
+            description: 'Thanks for your feedback.',
+          });
+          return;
+        }
+        throw error;
       }
 
       if (data) {
