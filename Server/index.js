@@ -14,8 +14,30 @@ const rootDir = join(__dirname, '..');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: ['http://localhost:8080'] }));
 app.use(express.json());
+
+// Dev-server auth gate for sensitive routes.
+// Full verification still happens inside each handler
+// (isAdminApiAuthorized / JWT check); this just rejects
+// header-less probes early, mirroring production expectations.
+app.use('/api/admin', (req, res, next) => {
+    const hasBearer = Boolean(req.headers.authorization);
+    const hasAdminToken = Boolean(req.headers['x-admin-token']);
+    if (!hasBearer && !hasAdminToken) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return next();
+});
+
+app.use('/api/ai', (req, res, next) => {
+    const hasBearer = Boolean(req.headers.authorization);
+    const hasAdminToken = Boolean(req.headers['x-admin-token']);
+    if (!hasBearer && !hasAdminToken) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return next();
+});
 
 // Helper to simulate Vercel-like request/response for Express
 const handleVercelFunction = async (handlerPath, req, res) => {
