@@ -33,16 +33,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      const { data, error } = await supabaseAdmin
+      const page = Math.max(1, Number(req.query.page ?? 1));
+      const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize ?? 20)));
+      const offset = (page - 1) * pageSize;
+
+      const { data, error, count } = await supabaseAdmin
         .from('return_requests')
-        .select('*,profiles(display_name),orders(order_number)')
-        .order('created_at', { ascending: false });
+        .select('*,profiles(display_name),orders(order_number)', { count: 'estimated' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1);
 
       if (error) {
         return res.status(500).json({ error: error.message, code: error.code });
       }
 
-      return res.status(200).json({ data });
+      return res.status(200).json({ data, page, pageSize, count });
     }
 
     if (req.method === 'POST') {
