@@ -34,6 +34,8 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
 
   const initialLoadDone = useRef(false);
   const previousUserId = useRef<string | null>(null);
+  const itemsRef = useRef<Product[]>(items);
+  itemsRef.current = items;
 
   useEffect(() => {
     const userId = isAuthenticated && user ? user.id : null;
@@ -59,17 +61,34 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
         );
         if (serverItemsError) throw serverItemsError;
 
-        if (serverItems && serverItems.length > 0) {
-          const serverIds = new Set(serverItems.map(si => si.product_id));
+        {
+          const serverIds = new Set((serverItems || []).map(si => si.product_id));
 
           const localString = localStorage.getItem(LOCAL_KEY);
           const local: Product[] = localString ? JSON.parse(localString) : [];
 
-          // Keep only items that exist on the server (intersection)
-          const merged = local.filter(li => serverIds.has(li.id));
+          // Union: keep ALL local guest items + server items (never drop guest-only).
+          const merged: Product[] = [...local];
+          const mergedIds = new Set(merged.map(m => m.id));
 
-          // Find IDs that are on the server but missing from local
-          const missingIds = Array.from(serverIds).filter(id => !merged.find(m => m.id === id));
+          // Push guest-only locals to server (upsert, non-blocking for UI).
+          const missingOnServer = local.filter(li => !serverIds.has(li.id));
+          if (missingOnServer.length > 0) {
+            void (async () => {
+              try {
+                const rows = missingOnServer.map(li => ({ user_id: user.id, product_id: li.id }));
+                const { error } = await supabase
+                  .from('wishlist_items')
+                  .upsert(rows, { onConflict: 'user_id,product_id' });
+                if (error) throw error;
+              } catch {
+                // Local items stay; retry happens on next toggle/sync.
+              }
+            })();
+          }
+
+          // Find IDs that are on the server but missing locally
+          const missingIds = Array.from(serverIds).filter(id => !mergedIds.has(id));
 
           if (missingIds.length > 0) {
             const { data: missingProducts, error: missingProductsError } = await withAuthRetrySupabase(() =>
@@ -151,20 +170,17 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   }, [isAuthenticated, user, synced, syncAddToServer]);
 
   const removeFromWishlist = useCallback((productId: string) => {
-    setItems(prev => {
-      const next = prev.filter(item => item.id !== productId);
-      return next;
-    });
+    const removed = itemsRef.current.find(item => item.id === productId);
+    setItems(prev => prev.filter(item => item.id !== productId));
     if (isAuthenticated && user && synced) {
-      const removed = items.find(item => item.id === productId);
       if (removed) void syncRemoveFromServer(productId, user.id).then((saved) => {
         if (!saved) setItems(prev => prev.some(item => item.id === productId) ? prev : [...prev, removed]);
       });
     }
-  }, [isAuthenticated, user, synced, syncRemoveFromServer, items]);
+  }, [isAuthenticated, user, synced, syncRemoveFromServer]);
 
   const toggleWishlist = useCallback((product: Product) => {
-    const exists = items.some(item => item.id === product.id);
+    const exists = itemsRef.current.some(item => item.id === product.id);
     setItems(prev => exists ? prev.filter(item => item.id !== product.id) : [...prev, product]);
     if (!isAuthenticated || !user || !synced) return;
 
@@ -176,7 +192,7 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
         : prev.filter(item => item.id !== product.id)
       );
     });
-  }, [isAuthenticated, user, synced, syncAddToServer, syncRemoveFromServer, items]);
+  }, [isAuthenticated, user, synced, syncAddToServer, syncRemoveFromServer]);
 
   const isInWishlist = useCallback((productId: string) => {
     return items.some(item => item.id === productId);
