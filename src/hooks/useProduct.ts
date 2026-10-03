@@ -9,6 +9,8 @@ export const useProduct = (id: string) => {
   return useQuery({
     queryKey: ['product', id],
     staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
     placeholderData: () => {
       if (!id) return undefined;
       

@@ -35,7 +35,7 @@ const colorSwatchMap: Record<string, string> = {
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: dbProduct, isLoading } = useProduct(id || '');
+  const { data: dbProduct, isLoading, isError, refetch } = useProduct(id || '');
   // Optimize: Only fetch a small subset for recent products mapping to avoid catalog overhead
   const { data: allProducts = [] } = useProducts({ limit: 40 });
   const product = dbProduct;
@@ -162,6 +162,25 @@ const ProductDetail = () => {
   if (isLoading && !product) return <ProductDetailSkeleton />;
 
   if (!product) {
+    if (isError) {
+      return (
+        <div className="container-custom flex min-h-[60dvh] flex-col items-center justify-center py-20 text-center">
+          <h1 className="mb-4 text-2xl font-bold">Couldn&apos;t load product</h1>
+          <p className="mb-8 text-muted-foreground">Check your connection and try again.</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => refetch()}
+              className="btn-primary"
+            >
+              Try again
+            </button>
+            <Link to="/shop" className="btn-outline">
+              Back to Shop
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="container-custom flex min-h-[60dvh] flex-col items-center justify-center py-20 text-center">
         <h1 className="mb-4 text-2xl font-bold">Product not found</h1>

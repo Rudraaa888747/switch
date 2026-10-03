@@ -211,13 +211,14 @@ const MyOrders = () => {
   const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<OrderGroup | null>(null);
 
   useEffect(() => {
-    if (returns.length > 0) {
-      console.log('User returns loaded:', returns);
-    }
     if (returnsError) {
-      console.error('User returns fetch error:', returnsError);
+      toast({
+        title: 'Error',
+        description: 'Failed to load return requests',
+        variant: 'destructive',
+      });
     }
-  }, [returns, returnsError]);
+  }, [returnsError]);
 
   const prevUserId = useRef(userId);
   useEffect(() => {
