@@ -64,12 +64,8 @@ const pathToLabel: Record<string, string> = {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdminAuthenticated, isLoading, notifications, markNotificationRead, clearNotifications, unreadCount, adminName } = useAdmin();
+  const { isLoading, notifications, markNotificationRead, clearNotifications, unreadCount, adminName } = useAdmin();
   const [showNotifications, setShowNotifications] = useState(false);
-  
-  useEffect(() => {
-    console.log('[NOTIF FLOW] 3. State updated to:', showNotifications);
-  }, [showNotifications]);
   const [showSearch, setShowSearch] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,14 +88,11 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const pageTitle = useMemo(() => breadcrumbs[breadcrumbs.length - 1]?.label || 'Dashboard', [breadcrumbs]);
 
-  useEffect(() => {
-    // if (!isLoading && !isAdminAuthenticated) navigate('/admin/login');
-  }, [isAdminAuthenticated, isLoading, navigate]);
+  // Auth guard lives in ProtectedAdminRoute — no duplicate redirect here.
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        console.log('[NOTIF FLOW] 5. Click outside detected, closing panel! Target:', (event.target as HTMLElement).tagName);
         setShowNotifications(false);
       }
     };
@@ -265,11 +258,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
               <div className="relative" ref={notifRef}>
                 <button onClick={() => {
-                  console.log('[NOTIF FLOW] 1. Button clicked');
-                  setShowNotifications((value) => {
-                    console.log('[NOTIF FLOW] 2. State updater called. Prev:', value, 'New:', !value);
-                    return !value;
-                  });
+                  setShowNotifications((value) => !value);
                 }} className={`relative flex items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground touch-target after:absolute after:-inset-3 ${isMobile ? 'h-9 w-9 bg-muted/60' : 'rounded-full border border-border/70 bg-background/70'}`} title="Notifications">
                   <Bell size={17} />
                   {unreadCount > 0 && (
@@ -281,8 +270,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
                 <AnimatePresence>
                   {showNotifications && (
-                    <motion.div 
-                      onAnimationStart={() => console.log('[NOTIF FLOW] 4. Component mounting / animation started')}
+                    <motion.div
                       initial={{ opacity: 0, y: 8, scale: 0.96 }} 
                       animate={{ opacity: 1, y: 0, scale: 1 }} 
                       exit={{ opacity: 0, y: 8, scale: 0.96 }} 
