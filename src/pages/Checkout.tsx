@@ -852,7 +852,7 @@ const Checkout = () => {
 
               <div className="flex flex-col justify-center gap-4 sm:flex-row">
                 <Link to="/shop" className="btn-primary">Continue Shopping</Link>
-                <Link to="/profile" className="btn-outline">View Orders</Link>
+                <Link to="/orders" className="btn-outline">View Orders</Link>
               </div>
             </motion.div>
           )}
