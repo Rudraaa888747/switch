@@ -370,10 +370,20 @@ const AdminMarketing = () => {
       return;
     }
     const coupon = coupons.find((c) => c.id === id);
-    persistCoupons(coupons.filter((c) => c.id !== id));
-    supabase.from('coupons').delete().eq('id', id).then(() => {}).catch(() => {});
-    setDeleteConfirmId(null);
-    toast({ title: 'Coupon Deleted', description: coupon ? `${coupon.code} has been removed.` : undefined });
+    // Delete from DB first — only remove locally on success, so a failed
+    // delete never shows a fake success while the code still works for shoppers.
+    supabase.from('coupons').delete().eq('id', id)
+      .then(({ error }) => {
+        if (error) throw error;
+        persistCoupons(coupons.filter((c) => c.id !== id));
+        setDeleteConfirmId(null);
+        toast({ title: 'Coupon Deleted', description: coupon ? `${coupon.code} has been removed.` : undefined });
+      })
+      .catch((err) => {
+        console.error('Coupon delete failed:', err);
+        setDeleteConfirmId(null);
+        toast({ title: 'Delete failed', description: 'Coupon could not be removed. Please try again.', variant: 'destructive' });
+      });
   };
 
   /* ─── Newsletter ─── */
