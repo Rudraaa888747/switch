@@ -237,7 +237,8 @@ const ProductDetail = () => {
         
         {/* Mobile Back Button */}
         <div className="lg:hidden fixed top-4 left-4 z-40">
-          <button 
+          <button
+            aria-label="Back to shop"
             onClick={() => {
               if (window.history.state && window.history.state.idx > 0) {
                 navigate(-1);
@@ -282,16 +283,17 @@ const ProductDetail = () => {
 
               {currentImages.length > 1 && (
                 <>
-                  <button onClick={() => handleImageNavigation('prev')} className="absolute left-6 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md opacity-0 transition-all duration-300 group-hover:opacity-100 hover:bg-black/60 active:scale-90">
+                  <button aria-label="Previous image" onClick={() => handleImageNavigation('prev')} className="absolute left-6 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md opacity-0 transition-all duration-300 group-hover:opacity-100 hover:bg-black/60 active:scale-90">
                     <ChevronLeft size={16} />
                   </button>
-                  <button onClick={() => handleImageNavigation('next')} className="absolute right-6 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md opacity-0 transition-all duration-300 group-hover:opacity-100 hover:bg-black/60 active:scale-90">
+                  <button aria-label="Next image" onClick={() => handleImageNavigation('next')} className="absolute right-6 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md opacity-0 transition-all duration-300 group-hover:opacity-100 hover:bg-black/60 active:scale-90">
                     <ChevronRight size={16} />
                   </button>
                 </>
               )}
 
               <motion.button
+                aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
                 onClick={handleWishlistToggle}
                 className={`absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-xl transition-all duration-300 ${inWishlist ? 'border-primary bg-primary text-primary-foreground' : 'border-foreground/10 bg-background/60 text-foreground hover:border-foreground/30 hover:bg-background/80'
                   }`}
@@ -307,6 +309,7 @@ const ProductDetail = () => {
                   {currentImages.map((image, index) => (
                     <button
                       key={index}
+                      aria-label={`View image ${index + 1}`}
                       onClick={() => setActiveImage(image)}
                       className={`theme-surface h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border transition-all duration-300 ${activeImage === image ? 'border-foreground ring-1 ring-foreground/20 shadow-[0_18px_36px_-26px_hsl(var(--foreground)/0.6)]' : 'border-border opacity-60 hover:opacity-100'
                         }`}
@@ -506,11 +509,11 @@ const ProductDetail = () => {
                   <p className="mt-1 text-sm text-muted-foreground">Refined compact stepper.</p>
                 </div>
                 <div className="flex items-center rounded-full border border-border bg-background p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.24)]">
-                  <button onClick={() => setQuantity((prev) => Math.max(1, prev - 1))} className="touch-target h-11 w-11 flex items-center justify-center rounded-full transition-colors hover:bg-muted/50 active:scale-90">
+                  <button aria-label="Decrease quantity" onClick={() => setQuantity((prev) => Math.max(1, prev - 1))} className="touch-target h-11 w-11 flex items-center justify-center rounded-full transition-colors hover:bg-muted/50 active:scale-90">
                     <Minus size={15} />
                   </button>
                   <span className="w-10 text-center text-sm font-medium tabular-nums">{quantity}</span>
-                  <button onClick={() => setQuantity((prev) => prev + 1)} className="touch-target h-11 w-11 flex items-center justify-center rounded-full transition-colors hover:bg-muted/50 active:scale-90">
+                  <button aria-label="Increase quantity" onClick={() => setQuantity((prev) => prev + 1)} className="touch-target h-11 w-11 flex items-center justify-center rounded-full transition-colors hover:bg-muted/50 active:scale-90">
                     <Plus size={15} />
                   </button>
                 </div>
@@ -730,7 +733,7 @@ const ProductDetail = () => {
               <span className="text-base font-semibold">{formatPrice(product.price)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleWishlistToggle} className="flex h-10 w-10 items-center justify-center rounded-full border border-border/50">
+              <button aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'} onClick={handleWishlistToggle} className="flex h-10 w-10 items-center justify-center rounded-full border border-border/50">
                 <Heart size={16} className={inWishlist ? 'fill-foreground' : ''} />
               </button>
               {product.stockQuantity === 0 || (selectedSize === '3XL' && product.id.length % 2 === 0) ? (

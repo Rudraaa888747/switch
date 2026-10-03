@@ -70,16 +70,16 @@ const Cart = () => {
 
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <div className="flex items-center rounded-full border border-border bg-background px-2 py-1.5 shadow-sm">
-                        <button onClick={() => updateQuantity(item.product.id, item.size, item.color, item.quantity - 1)} className="touch-target h-12 w-12 flex items-center justify-center rounded-full hover:bg-muted active:scale-95 transition-all">
+                        <button aria-label="Decrease quantity" onClick={() => updateQuantity(item.product.id, item.size, item.color, item.quantity - 1)} className="touch-target h-12 w-12 flex items-center justify-center rounded-full hover:bg-muted active:scale-95 transition-all">
                           <Minus size={18} />
                         </button>
                         <span className="w-10 text-center text-base font-semibold">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.product.id, item.size, item.color, item.quantity + 1)} className="touch-target h-12 w-12 flex items-center justify-center rounded-full hover:bg-muted active:scale-95 transition-all">
+                        <button aria-label="Increase quantity" onClick={() => updateQuantity(item.product.id, item.size, item.color, item.quantity + 1)} className="touch-target h-12 w-12 flex items-center justify-center rounded-full hover:bg-muted active:scale-95 transition-all">
                           <Plus size={18} />
                         </button>
                       </div>
 
-                      <button onClick={() => removeFromCart(item.product.id, item.size, item.color)} className="flex h-12 w-12 items-center justify-center rounded-full text-destructive hover:bg-destructive/10 active:scale-95 transition-all">
+                      <button aria-label={`Remove ${item.product.name} from cart`} onClick={() => removeFromCart(item.product.id, item.size, item.color)} className="flex h-12 w-12 items-center justify-center rounded-full text-destructive hover:bg-destructive/10 active:scale-95 transition-all">
                         <Trash2 size={20} />
                       </button>
                     </div>
