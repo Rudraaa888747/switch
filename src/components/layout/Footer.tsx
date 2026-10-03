@@ -22,7 +22,7 @@ const LEGAL = [
 const CUSTOMER_CARE = [
   { label: 'FAQ', to: '/faq' },
   { label: 'Track Order', to: '/orders' },
-  { label: 'Shipping & Returns', to: '/orders' },
+  { label: 'Shipping & Returns', to: '/refunds' },
   { label: 'Size Guide', to: '/size-guide' },
 ];
 
@@ -268,7 +268,7 @@ const Footer = () => {
             <span className="swf-col-label">Customer Care</span>
             <div className="swf-sitemap">
               {CUSTOMER_CARE.map(({ label, to }) => (
-                <Link key={to} to={to} className="swf-sitemap-link">
+                <Link key={label} to={to} className="swf-sitemap-link">
                   <ArrowRight size={11} className="swf-sitemap-arrow" />
                   {label}
                 </Link>
