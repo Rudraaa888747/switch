@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle, Clock, History, Package, Truck, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -319,10 +320,10 @@ const MyOrders = () => {
                   Your journey with our premium collection begins here.
                 </p>
                 <Button asChild className="btn-primary rounded-full px-8 py-6 h-auto text-[10px] uppercase tracking-widest group">
-                  <a href="/shop" className="flex items-center gap-2">
+                  <Link to="/shop" className="flex items-center gap-2">
                     Explore Collection
                     <ArrowRight size={14} className="transition-transform duration-500 group-hover:translate-x-1" />
-                  </a>
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

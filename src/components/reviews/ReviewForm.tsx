@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Send, User, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -155,9 +156,9 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
         <p className="text-sm text-muted-foreground mb-4">
           Login to write a review
         </p>
-        <a href="/auth" className="btn-primary text-sm">
+        <Link to="/auth" className="btn-primary text-sm">
           Login to Review
-        </a>
+        </Link>
       </div>
     );
   }
