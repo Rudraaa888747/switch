@@ -66,7 +66,7 @@ const cardHover = {
 const AdminInventory = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [stockFilter, setStockFilter] = useState<string>('all');
-  const { data: products = [], isLoading } = useProducts();
+  const { data: products = [], isLoading, isError, refetch } = useProducts();
 
   const inventoryData = useMemo(() => products.map((product) => ({
     ...product,
@@ -265,6 +265,17 @@ const AdminInventory = () => {
             {isLoading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : isError ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-sm font-medium">Couldn&apos;t load inventory</p>
+                <p className="text-xs text-muted-foreground mt-1">Check your connection and try again.</p>
+                <button
+                  onClick={() => refetch()}
+                  className="mt-4 rounded-xl border border-border px-4 py-2 text-xs font-medium transition-colors hover:bg-muted"
+                >
+                  Try again
+                </button>
               </div>
             ) : (
             <table className="w-full">
