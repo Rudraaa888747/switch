@@ -72,6 +72,7 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
           const mergedIds = new Set(merged.map(m => m.id));
 
           // Push guest-only locals to server (upsert, non-blocking for UI).
+          // Local items stay visible either way; a toast tells the truth on failure.
           const missingOnServer = local.filter(li => !serverIds.has(li.id));
           if (missingOnServer.length > 0) {
             void (async () => {
@@ -82,7 +83,7 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
                   .upsert(rows, { onConflict: 'user_id,product_id' });
                 if (error) throw error;
               } catch {
-                // Local items stay; retry happens on next toggle/sync.
+                toast({ title: 'Wishlist sync incomplete', description: 'Some items are saved on this device only.', variant: 'destructive' });
               }
             })();
           }
@@ -199,9 +200,17 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   }, [items]);
 
   const clearWishlist = useCallback(() => {
+    const prev = itemsRef.current;
     setItems([]);
     if (isAuthenticated && user) {
-      supabase.from('wishlist_items').delete().eq('user_id', user.id).then(() => { }).catch(() => { });
+      supabase.from('wishlist_items').delete().eq('user_id', user.id)
+        .then(({ error }) => {
+          if (error) throw error;
+        })
+        .catch(() => {
+          setItems(prev);
+          toast({ title: 'Clear failed', description: 'Wishlist could not be cleared. Please try again.', variant: 'destructive' });
+        });
     }
   }, [isAuthenticated, user]);
 
