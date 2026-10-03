@@ -13,12 +13,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  if (!(await isAdminApiAuthorized(req.headers))) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({ error: 'AI service not configured' });
   }
 
-  const { messages, model = 'gpt-4o-mini' } = req.body || {};
+  const { messages } = req.body || {};
+  const model = 'gpt-4o-mini';
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array is required' });
@@ -43,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         max_tokens: 500,
         temperature: 0.7,
       }),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!openAiRes.ok) {
