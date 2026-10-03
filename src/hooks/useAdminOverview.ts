@@ -61,25 +61,35 @@ export const fetchAdminOverview = async (): Promise<AdminOverviewData> => {
   }
 
   const rawOrders = (orders || []) as RawOrderRecord[];
-  
+
   // For modern orders, fetch items from order_items table
+  // Cap IDs per query to avoid huge IN() + use Set/Map (was O(n*m) filter).
   const modernOrderIds = rawOrders
     .filter((o): o is RawOrderRecord => !o.items || (Array.isArray(o.items) && o.items.length === 0))
-    .map((o) => o.id);
+    .map((o) => o.id)
+    .slice(0, 150);
+  const modernIdSet = new Set(modernOrderIds);
 
   let allItems: OrderItemRecord[] = [];
   if (modernOrderIds.length > 0) {
     const { data: items } = await supabase
       .from('order_items')
-      .select('*')
+      .select('order_id, product_id, product_name, unit_price, price, quantity')
       .in('order_id', modernOrderIds);
     allItems = items || [];
   }
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  for (const item of allItems) {
+    const key = String(item.order_id || '');
+    if (!key) continue;
+    const list = itemsByOrder.get(key);
+    if (list) list.push(item);
+    else itemsByOrder.set(key, [item]);
+  }
 
   const mergedOrders = rawOrders.map(order => {
-    if (modernOrderIds.includes(order.id)) {
-      const orderItems = allItems.filter(item => item.order_id === order.id);
-      return { ...order, items: orderItems };
+    if (modernIdSet.has(order.id)) {
+      return { ...order, items: itemsByOrder.get(order.id) || [] };
     }
     return order;
   });
@@ -182,6 +192,8 @@ export const useAdminOverview = () => {
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     placeholderData: keepPreviousData,
   });
 };
