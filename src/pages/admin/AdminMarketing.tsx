@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Megaphone,
@@ -148,7 +149,15 @@ const mapUiCouponToDb = (coupon: Omit<Coupon, 'id'>) => ({
 const AdminMarketing = () => {
   const { toast } = useToast();
   const { isDemoMode, simulateAction, blockAction } = useDemoMode();
+  const { section } = useParams<{ section?: string }>();
   const [activeTab, setActiveTab] = useState<TabId>('campaigns');
+
+  // Deep links like /admin/marketing/coupons select the matching tab.
+  useEffect(() => {
+    if (section && (tabs as readonly { id: string }[]).some(t => t.id === section)) {
+      setActiveTab(section as TabId);
+    }
+  }, [section]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [newsletterDraft, setNewsletterDraft] = useState<{ subject: string; content: string }>(defaultDraft);

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Settings,
@@ -89,7 +90,15 @@ function loadSettings(): StoreSettings {
 const AdminSettings = () => {
   const { isDemoMode, simulateAction } = useDemoMode();
   const isMobile = useIsMobile();
+  const { section } = useParams<{ section?: string }>();
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
+
+  // Deep links like /admin/settings/payment select the matching tab.
+  useEffect(() => {
+    if (section && (settingsTabs as readonly { id: string }[]).some(t => t.id === section)) {
+      setActiveTab(section as SettingsTabId);
+    }
+  }, [section]);
   const [settings, setSettings] = useState<StoreSettings>(loadSettings);
 
   useEffect(() => {

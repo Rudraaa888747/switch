@@ -268,7 +268,7 @@ const SizeGuide = () => {
               className="inline-flex items-center gap-2 mb-6 text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors group"
             >
               <ArrowLeft size={14} className="transition-transform duration-200 group-hover:-translate-x-1" />
-              Back to Product
+              Back
             </button>
           </Reveal>
           <Reveal>

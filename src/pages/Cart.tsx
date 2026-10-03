@@ -117,6 +117,9 @@ const Cart = () => {
                 Checkout
                 <ArrowRight size={16} />
               </Link>
+              <Link to="/shop" className="mt-3 flex w-full items-center justify-center text-xs uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground">
+                Continue shopping
+              </Link>
             </div>
           </div>
         </div>

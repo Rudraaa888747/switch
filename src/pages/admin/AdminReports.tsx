@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   FileBarChart,
@@ -50,7 +51,15 @@ function computeStock(product: typeof products[number]): number {
 }
 
 const AdminReports = () => {
+  const { section } = useParams<{ section?: string }>();
   const [activeTab, setActiveTab] = useState<ReportTabId>('sales');
+
+  // Deep links like /admin/reports/inventory select the matching tab.
+  useEffect(() => {
+    if (section && (reportTabs as readonly { id: string }[]).some(t => t.id === section)) {
+      setActiveTab(section as ReportTabId);
+    }
+  }, [section]);
   const [dateRange, setDateRange] = useState('');
   const [reportType, setReportType] = useState('Sales Summary');
   const [format, setFormat] = useState('CSV');
