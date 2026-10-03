@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { isDemoMode } from '@/hooks/useDemoMode';
 import {
@@ -110,6 +110,8 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const notificationsRef = useRef<AdminNotification[]>([]);
+  notificationsRef.current = notifications;
   const [staffMembers, setStaffMembers] = useState<AdminStaff[]>(loadStaffFromStorage);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -400,13 +402,25 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const markNotificationRead = useCallback((id: string) => {
+    const wasUnread = notificationsRef.current.some(n => n.id === id && !n.read);
     setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
-    markAdminNotificationRead(id).catch(() => {});
+    // Revert the optimistic tick if the server write fails.
+    markAdminNotificationRead(id).catch(() => {
+      if (wasUnread) {
+        setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: false } : n)));
+      }
+    });
   }, []);
 
   const clearNotifications = useCallback(() => {
+    const unreadIds = new Set(notificationsRef.current.filter(n => !n.read).map(n => n.id));
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    markAllAdminNotificationsRead().catch(() => {});
+    // Revert the optimistic clear if the server write fails.
+    markAllAdminNotificationsRead().catch(() => {
+      if (unreadIds.size > 0) {
+        setNotifications(prev => prev.map(n => (unreadIds.has(n.id) ? { ...n, read: false } : n)));
+      }
+    });
   }, []);
 
   const addStaffMember = useCallback((staff: Omit<AdminStaff, 'id'>) => {
