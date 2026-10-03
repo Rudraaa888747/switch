@@ -85,6 +85,8 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
         .select('id, user_id, rating, title, content, sentiment, helpful_count, created_at, is_verified_purchase')
         .maybeSingle();
 
+      let submitted = data ?? null;
+
       if (error) {
         if (error.code === '23505') {
           toast({
@@ -95,23 +97,27 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
           return;
         }
         // RLS may block RETURNING even when the insert succeeded
-        // (PGRST116 / 406 with no rows). Treat as submitted, not failed.
+        // (PGRST116 / 406 with no rows). Confirm the row exists before
+        // claiming success — otherwise report failure honestly.
         if (error.code === 'PGRST116' || error.code === '406' || !data) {
-          setIsSubmitted(true);
-          toast({
-            title: 'Review Submitted!',
-            description: 'Thanks for your feedback.',
-          });
-          return;
+          const { data: confirmed, error: confirmError } = await supabase
+            .from('reviews')
+            .select('id, user_id, rating, title, content, sentiment, helpful_count, created_at, is_verified_purchase')
+            .eq('user_id', userId)
+            .eq('product_id', productId)
+            .maybeSingle();
+          if (confirmError || !confirmed) throw error;
+          submitted = confirmed;
+        } else {
+          throw error;
         }
-        throw error;
       }
 
-      if (data) {
+      if (submitted) {
         onReviewSubmitted({
-          ...data,
-          helpful_count: Number(data.helpful_count) || 0,
-          is_verified_purchase: Boolean(data.is_verified_purchase),
+          ...submitted,
+          helpful_count: Number(submitted.helpful_count) || 0,
+          is_verified_purchase: Boolean(submitted.is_verified_purchase),
         });
 
         await createAdminNotification({
@@ -120,7 +126,7 @@ const ReviewForm = ({ productId, userId, isAuthenticated, onReviewSubmitted, exi
           type: sentiment === 'negative' ? 'warning' : 'success',
           eventType: 'review_added',
           link: '/admin/reviews',
-          metadata: { productId, rating, verified: Boolean(data.is_verified_purchase) },
+          metadata: { productId, rating, verified: Boolean(submitted.is_verified_purchase) },
         }).catch(() => {});
       }
 
