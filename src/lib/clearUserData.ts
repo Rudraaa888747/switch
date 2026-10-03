@@ -26,6 +26,7 @@ export const clearLocalUserData = () => {
     sessionStorage.removeItem('checkout_address');
     sessionStorage.removeItem('checkout_idempotency_key');
     sessionStorage.removeItem('behavior_session_id');
+    // Legacy key from when admin state was mirrored to storage (never read).
     sessionStorage.removeItem('admin_session');
   } catch {
     // ignore

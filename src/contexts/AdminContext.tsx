@@ -278,22 +278,14 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   }, [isAdminAuthenticated]);
 
   // Demo: any store user becomes admin instantly (same email+pass).
+  // Source of truth is the Supabase session (refreshAdminAuth) — no parallel
+  // sessionStorage copy (it was write-only and never read).
   const adminDemoLogin = useCallback((name?: string | null, email?: string | null) => {
     const displayName = name || email?.split('@')[0] || 'Admin';
     setIsAdminAuthenticated(true);
     setAdminName(displayName);
     setAdminRole('super_admin');
     setIsLoading(false);
-    try {
-      sessionStorage.setItem('admin_session', JSON.stringify({
-        authenticated: true,
-        name: displayName,
-        role: 'super_admin',
-        avatar: null,
-        timestamp: Date.now(),
-        demo: true,
-      }));
-    } catch { /* ignore */ }
   }, []);
 
   const adminLogin = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -360,16 +352,6 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
       setAdminName(name);
       setAdminRole(role as 'super_admin' | 'manager' | 'editor' | 'support');
       setAdminAvatar(avatar);
-
-      try {
-        sessionStorage.setItem('admin_session', JSON.stringify({
-          authenticated: true,
-          name,
-          role,
-          avatar,
-          timestamp: Date.now(),
-        }));
-      } catch { /* ignore */ }
 
       return { success: true };
     } catch {
