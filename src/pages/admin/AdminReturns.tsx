@@ -479,6 +479,9 @@ const AdminReturns = () => {
         );
       });
       queryClient.invalidateQueries({ queryKey: ['admin-returns'] });
+      // The shopper's own list uses ['user-returns', userId] — refresh it too
+      // or MyOrders shows the old status until realtime (or reload).
+      queryClient.invalidateQueries({ queryKey: ['user-returns'] });
 
       setSelectedReturn((prev) => {
         if (!prev || String(prev.id) !== payload.id) return prev;

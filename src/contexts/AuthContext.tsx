@@ -40,8 +40,8 @@ export interface User {
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';
   addresses: Address[];
-  orders: Order[];
-  wishlistCount: number;
+  // NOTE: orders live in useOrders (['user-orders', id]) and wishlist count in
+  // WishlistContext — do not re-add parallel copies here (dual-source bugs).
   memberSince: string;
 }
 
@@ -57,7 +57,6 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
-  addOrder: (order: Order) => void;
   addAddress: (address: Omit<Address, 'id'>) => void;
   removeAddress: (addressId: string) => void;
   updateAddress: (addressId: string, data: Partial<Address>) => void;
@@ -182,8 +181,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '',
         walletBalance: 0,
         addresses: [],
-        orders: [],
-        wishlistCount: 0,
         memberSince:
           session.user.created_at?.split('T')[0] ||
           new Date().toISOString().split('T')[0],
@@ -450,6 +447,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       const updatedUser = { ...user, ...data };
       setUser(updatedUser);
+      // Keep the 15-min profile cache in sync or the next login hydrates the old name.
+      if (data.name !== undefined || data.avatar !== undefined) {
+        const prev = getCachedProfile(user.id);
+        storeCachedProfile(user.id, {
+          display_name: data.name !== undefined ? data.name : (prev?.display_name ?? null),
+          avatar_url: data.avatar !== undefined ? data.avatar : (prev?.avatar_url ?? null),
+          wallet_balance: prev?.wallet_balance ?? updatedUser.walletBalance ?? 0,
+        });
+      }
 
       try {
         const updatePayload: Partial<{ display_name: string }> = {};
@@ -473,15 +479,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error('Failed to save profile changes:', err);
       }
-    }
-  };
-
-  const addOrder = (order: Order) => {
-    if (user) {
-      setUser({
-        ...user,
-        orders: [order, ...user.orders],
-      });
     }
   };
 
@@ -525,8 +522,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: email.split('@')[0],
       walletBalance: 0,
       addresses: [],
-      orders: [],
-      wishlistCount: 0,
       memberSince: new Date().toISOString().split('T')[0],
     });
   };
@@ -543,7 +538,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     resetPassword,
     logout,
     updateProfile,
-    addOrder,
     addAddress,
     removeAddress,
     updateAddress,
@@ -552,7 +546,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }), [
     user, supabaseUser, session, isInitializing, isLoading,
     login, signup, signInWithGoogle, resetPassword, logout,
-    updateProfile, addOrder, addAddress, removeAddress, updateAddress, demoBypassLogin
+    updateProfile, addAddress, removeAddress, updateAddress, demoBypassLogin
   ]);
 
   return (
