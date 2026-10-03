@@ -66,7 +66,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const PROFILE_CACHE_KEY_PREFIX = 'switch_profile_cache:';
-const AUTH_REQUEST_TIMEOUT_MS = 30_000;
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 const AUTH_RETRY_DELAY_MS = 500;
 
 const sleep = (ms: number) =>
