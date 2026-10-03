@@ -6,9 +6,16 @@ interface VercelResponse {
 }
 
 export default async function handler(req: Request, res: VercelResponse) {
-  // Using the server-side environment variables if available, otherwise the VITE_ prefixed ones
+  // Connectivity ping only — prefer the low-privilege anon key so a
+  // successful ping never implies service_role access. Service role is
+  // accepted as a fallback for environments that only set server vars.
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+  const supabaseKey =
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    '';
+  const usingServiceRole = !process.env.SUPABASE_ANON_KEY && !process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).json({
@@ -29,6 +36,7 @@ export default async function handler(req: Request, res: VercelResponse) {
     return res.status(200).json({
       status: 'success',
       message: 'Keep-alive ping successful',
+      privilege: usingServiceRole ? 'service_role' : 'anon',
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
