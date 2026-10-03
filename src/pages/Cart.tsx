@@ -1,4 +1,4 @@
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
@@ -9,6 +9,7 @@ import { getProductImage } from '@/lib/utils';
 const Cart = () => {
   const { items, updateQuantity, removeFromCart, totalPrice, totalItems } = useCart();
   const { isAuthenticated, isAuthReady } = useAuth();
+  const showGuestNudge = isAuthReady && !isAuthenticated && items.length > 0;
 
   const estimatedTax = Math.round(items.reduce((acc, item) => {
     const rate = item.product.price <= 1000 ? 0.05 : 0.12;
@@ -18,10 +19,6 @@ const Cart = () => {
   const has5Percent = items.some(item => item.product.price <= 1000);
   const has12Percent = items.some(item => item.product.price > 1000);
   const taxLabel = `Estimated GST (${has5Percent && has12Percent ? '5-12%' : has12Percent ? '12%' : '5%'})`;
-
-  if (isAuthReady && !isAuthenticated) {
-    return <Navigate to="/auth" />;
-  }
 
   if (items.length === 0) {
     return (
@@ -94,6 +91,14 @@ const Cart = () => {
           </div>
 
           <div className="lg:col-span-1">
+            {showGuestNudge && (
+              <div className="mb-3 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                Browsing as guest — you can review your bag, login is needed at checkout.{' '}
+                <Link to="/auth?returnTo=/cart" className="font-medium text-foreground underline underline-offset-2">
+                  Log in
+                </Link>
+              </div>
+            )}
             <div className="mobile-glass-panel sticky top-24 rounded-[2rem] p-6">
               <h2 className="text-lg font-semibold">Order Summary</h2>
               <div className="mt-5 space-y-3 text-sm">
