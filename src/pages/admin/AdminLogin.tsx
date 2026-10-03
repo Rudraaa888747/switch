@@ -3,17 +3,26 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, ArrowRight, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAdmin } from '@/contexts/AdminContext';
 import { isDemoMode } from '@/hooks/useDemoMode';
 
 const AdminLogin = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { login, demoBypassLogin, user, isLoading } = useAuth();
+  const { login, user, isLoading: isAuthLoading, isAuthReady } = useAuth();
+  const { isAdminAuthenticated, isLoading: isAdminLoading, adminDemoLogin, refreshAdminAuth } = useAdmin();
 
-  if (user) {
-    return <Navigate to="/admin/dashboard" replace />;
+  // Already inside admin — don't stay on login page.
+  // Strict: verified admin session required, even in demo mode.
+  if (isAuthReady && !isAdminLoading) {
+    if (isAdminAuthenticated) {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    void user;
+    void isDemoMode;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -26,22 +35,27 @@ const AdminLogin = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const result = await login(cleanEmail, password);
       if (result.success) {
+        // Correct store email+pass verified by Supabase.
+        // Instant admin flag for no flicker; listener re-verifies via session.
+        adminDemoLogin(undefined, cleanEmail);
+        await refreshAdminAuth();
         navigate('/admin/dashboard');
       } else {
-        if (isDemoMode) {
-          demoBypassLogin(cleanEmail);
-          navigate('/admin/dashboard');
-          return;
-        }
+        // Wrong credentials — even in demo mode, show error, no entry.
         setError(result.error || 'Invalid email or password');
       }
     } catch {
       setError('Connection error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const isLoading = isSubmitting || isAuthLoading;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
