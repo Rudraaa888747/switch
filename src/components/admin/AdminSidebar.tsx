@@ -73,10 +73,6 @@ const menuGroups: MenuGroup[] = [
         label: 'Staff',
         path: '/admin/staff',
         permission: 'manage_staff',
-        submenu: [
-          { icon: UserCog, label: 'All Staff', path: '/admin/staff' },
-          { icon: Settings, label: 'Roles', path: '/admin/staff/roles' },
-        ],
       },
     ],
   },

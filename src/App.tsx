@@ -224,7 +224,8 @@ const App = () => (
                           <Route path="/admin/settings" element={<AdminSettings />} />
                           <Route path="/admin/settings/:section" element={<AdminSettings />} />
                           <Route path="/admin/staff" element={<AdminStaff />} />
-                          <Route path="/admin/staff/:section" element={<AdminStaff />} />
+                          {/* No Roles view exists — stale /admin/staff/* links fall back to the staff list. */}
+                          <Route path="/admin/staff/:section" element={<Navigate to="/admin/staff" replace />} />
                         </Route>
                       </Routes>
 
