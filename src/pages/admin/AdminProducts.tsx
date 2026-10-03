@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { clearProductCache } from '@/hooks/useProducts';
 import AdminLayout from '@/components/admin/AdminLayout';
 import {
   supabaseRestDelete,
@@ -295,6 +296,9 @@ const AdminProducts = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      // Storefront reads ['products'] / ['product', id] + module cache —
+      // invalidate them too or the shop shows stale data for 30s.
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       createAdminNotification({
         title: 'Product added',
         message: `${formData.name.trim() || 'A new product'} is now live in the catalog.`,
@@ -325,9 +329,12 @@ const AdminProducts = () => {
       const data = await supabaseRestUpdate<ProductData[]>('products', updates, params);
       return data[0];
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['product', variables.id] });
+      clearProductCache(variables.id);
       toast({ 
         title: isDemoMode ? '✓ Product Updated (Simulated)' : '✓ Product Updated Successfully',
         description: isDemoMode ? 'Demo Mode: Changes are visible locally but not saved.' : undefined
@@ -350,9 +357,12 @@ const AdminProducts = () => {
       const params = new URLSearchParams({ id: `eq.${id}` });
       await supabaseRestDelete('products', params);
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['product', id] });
+      clearProductCache(id);
       toast({ title: 'Product Deleted' });
     },
     onError: (error: Error) => {
