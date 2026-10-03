@@ -304,7 +304,7 @@ const AdminReturns = () => {
     };
   }, [queryClient]);
 
-  const { data: returns = [], isLoading } = useQuery({
+  const { data: returns = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-returns'],
     queryFn: async () => {
       const payload = await loadReturns();
@@ -359,8 +359,26 @@ const AdminReturns = () => {
       });
     },
     staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
+
+  const returnsErrorBlock = (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+        <Undo2 className="h-6 w-6 text-destructive" />
+      </div>
+      <p className="text-sm font-medium">Couldn&apos;t load returns</p>
+      <p className="text-xs text-muted-foreground mt-1">Check your connection and try again.</p>
+      <button
+        onClick={() => refetch()}
+        className="mt-4 rounded-xl border border-border px-4 py-2 text-xs font-medium transition-colors hover:bg-muted"
+      >
+        Try again
+      </button>
+    </div>
+  );
 
   const computeRefundTotal = useCallback((ret: AdminReturnRow) => {
     const itemTotal = (ret.items || []).reduce(
@@ -770,6 +788,8 @@ const AdminReturns = () => {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mt-4">Loading returns...</p>
                 </div>
+              ) : isError ? (
+                returnsErrorBlock
               ) : filteredReturns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
@@ -1095,6 +1115,8 @@ const AdminReturns = () => {
                         <p className="text-sm text-muted-foreground">Loading returns...</p>
                       </div>
                     </div>
+                  ) : isError ? (
+                    returnsErrorBlock
                   ) : filteredReturns.length === 0 ? (
                     <div className="space-y-4 py-16 text-center md:py-24">
                       <Undo2 className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
