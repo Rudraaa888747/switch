@@ -37,25 +37,50 @@ const Shop = () => {
   };
   useDocumentTitle(getPageTitle());
 
+  // URL → state: Header search / external links change params while Shop is
+  // mounted. Without this the grid goes stale (state was URL-initialized once).
+  useEffect(() => {
+    const next = {
+      category: searchParams.get('category') || 'all',
+      priceRange: searchParams.get('priceRange') || 'all',
+      colors: searchParams.get('colors') ? searchParams.get('colors')!.split(',') : [] as string[],
+      sizes: searchParams.get('sizes') ? searchParams.get('sizes')!.split(',') : [] as string[],
+      occasion: searchParams.get('occasion') || 'all',
+    };
+    setFilters(prev => (
+      prev.category === next.category &&
+      prev.priceRange === next.priceRange &&
+      prev.occasion === next.occasion &&
+      prev.colors.join(',') === next.colors.join(',') &&
+      prev.sizes.join(',') === next.sizes.join(',')
+        ? prev : next
+    ));
+    const fp = searchParams.get('filter');
+    setSortBy(fp === 'new' || fp === 'sale' ? 'newest' : 'popular');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
+
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
-    
+
     if (filters.category !== 'all') params.set('category', filters.category);
     else params.delete('category');
-    
+
     if (filters.priceRange !== 'all') params.set('priceRange', filters.priceRange);
     else params.delete('priceRange');
-    
+
     if (filters.colors.length > 0) params.set('colors', filters.colors.join(','));
     else params.delete('colors');
-    
+
     if (filters.sizes.length > 0) params.set('sizes', filters.sizes.join(','));
     else params.delete('sizes');
-    
+
     if (filters.occasion !== 'all') params.set('occasion', filters.occasion);
     else params.delete('occasion');
-    
-    setSearchParams(params, { replace: true });
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, setSearchParams]);
 

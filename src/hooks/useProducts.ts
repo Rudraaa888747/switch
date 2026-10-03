@@ -36,11 +36,41 @@ export interface DbProduct {
   created_at: string;
 }
 
-const productCache = new Map<string, Product>();
+const productCache = new Map<string, { version: string; product: Product }>();
+
+const productVersion = (dbProduct: DbProduct): string => {
+  const variantSig = (dbProduct.variants || [])
+    .map(v => `${v.sku}:${v.price}:${v.stock ?? ''}`)
+    .join('|');
+  return [
+    dbProduct.name,
+    dbProduct.price,
+    dbProduct.original_price,
+    dbProduct.category,
+    dbProduct.subcategory,
+    dbProduct.stock_quantity,
+    dbProduct.image_url,
+    dbProduct.colors?.join(','),
+    dbProduct.sizes?.join(','),
+    dbProduct.occasion?.join(','),
+    dbProduct.is_new,
+    dbProduct.is_trending,
+    dbProduct.rating,
+    dbProduct.reviews_count,
+    variantSig,
+  ].join('~');
+};
+
+export const clearProductCache = (id?: string) => {
+  if (id) productCache.delete(id);
+  else productCache.clear();
+};
 
 export const mapDbProductToProduct = (dbProduct: DbProduct): Product => {
-  if (productCache.has(dbProduct.id)) {
-    return productCache.get(dbProduct.id)!;
+  const version = productVersion(dbProduct);
+  const cached = productCache.get(dbProduct.id);
+  if (cached && cached.version === version) {
+    return cached.product;
   }
 
   const derivedSizes = dbProduct.sizes?.length
@@ -121,7 +151,7 @@ export const mapDbProductToProduct = (dbProduct: DbProduct): Product => {
         ],
   };
 
-  productCache.set(dbProduct.id, product);
+  productCache.set(dbProduct.id, { version, product });
   return product;
 };
 
