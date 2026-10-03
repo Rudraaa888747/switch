@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle, Clock, History, Package, Truck, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -218,9 +218,13 @@ const MyOrders = () => {
     }
   }, [returns, returnsError]);
 
+  const prevUserId = useRef(userId);
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [userId, orders.length]);
+    if (prevUserId.current !== userId) {
+      prevUserId.current = userId;
+      setVisibleCount(PAGE_SIZE);
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (error) {
