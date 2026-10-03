@@ -40,20 +40,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const safeReviews = (reviews || []) as ReviewRow[];
-    const count = safeReviews.length;
-    const average =
-      count > 0
-        ? Math.round(
-            (safeReviews.reduce((sum, item) => sum + (Number(item.rating) || 0), 0) / count) * 10
-          ) / 10
-        : 0;
+
+    // Aggregate over ALL reviews via RPC, not the paginated slice
+    let average = 0;
+    let count = 0;
+    const { data: summaryRows, error: summaryError } = await supabaseAdmin.rpc(
+      'get_product_review_summary',
+      { p_product_id: productId }
+    );
+    if (!summaryError && Array.isArray(summaryRows) && summaryRows[0]) {
+      const row = summaryRows[0] as { average_rating?: number | string; review_count?: number | string };
+      average = Number(row.average_rating) || 0;
+      count = Number(row.review_count) || 0;
+    } else {
+      // Fallback: exact count head query (no row data)
+      const { count: exactCount } = await supabaseAdmin
+        .from('reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', productId);
+      count = exactCount || 0;
+    }
 
     return res.status(200).json({
       data: {
-        reviews: safeReviews.map((review, index) => ({
-          ...review,
-          author_name: getReviewDisplayName(review.user_id, index),
-        })),
+        reviews: safeReviews.map((review, index) => {
+          const { user_id, ...publicReview } = review;
+          return {
+            ...publicReview,
+            author_name: getReviewDisplayName(user_id, index),
+          };
+        }),
         summary: {
           average,
           count,
