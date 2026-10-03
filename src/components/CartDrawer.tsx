@@ -49,10 +49,11 @@ export default function CartDrawer() {
 
   useEffect(() => {
     if (isDrawerOpen && isAuthReady && !isAuthenticated) {
+      const back = location.pathname.startsWith('/auth') ? '/' : location.pathname;
       closeDrawer();
-      navigate('/auth');
+      navigate(`/auth?returnTo=${encodeURIComponent(back)}`);
     }
-  }, [isDrawerOpen, isAuthReady, isAuthenticated, closeDrawer, navigate]);
+  }, [isDrawerOpen, isAuthReady, isAuthenticated, closeDrawer, navigate, location.pathname]);
 
   const shippingProgress = Math.min((totalPrice / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const remaining = FREE_SHIPPING_THRESHOLD - totalPrice;

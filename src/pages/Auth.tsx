@@ -56,7 +56,13 @@ const Auth = () => {
   const navigate = useNavigate();
 
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get('returnTo') || '/';
+  // Whitelist internal return paths only — blocks open-redirect via ?returnTo=//evil etc.
+  const returnTo = (() => {
+    const raw = searchParams.get('returnTo');
+    if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/';
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return '/';
+    return raw;
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
