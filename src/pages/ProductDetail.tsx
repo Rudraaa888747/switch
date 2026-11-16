@@ -424,7 +424,7 @@ const ProductDetail = () => {
                   className="w-full h-full p-4 flex items-center justify-center overflow-auto"
                 >
                   {/* For a true pinch-to-zoom, we'd need a specialized library, but scaling CSS serves as a fallback. Here we just show the image large. */}
-                  <img loading="eager" fetchpriority="high" src={currentImages[selectedIndex]} alt="Zoomed" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
+                  <img loading="eager" fetchPriority="high" src={currentImages[selectedIndex]} alt="Zoomed" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
                 </motion.div>
               </div>
             )}

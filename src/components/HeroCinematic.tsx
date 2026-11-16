@@ -43,7 +43,7 @@ export default function HeroCinematic() {
 
   if (isMobile) {
     return (
-      <section ref={sectionRef} className="relative w-full overflow-hidden bg-black md:-mt-20">
+      <section ref={sectionRef} className="relative w-full overflow-hidden bg-black -mt-[calc(var(--mobile-header-height)+var(--mobile-safe-top))] md:-mt-20">
         <section className="relative flex min-h-[100dvh] items-end overflow-hidden bg-black">
           <motion.div className="absolute inset-0 gpu-layer" style={{ scale: imageScale, y: imageY }}>
             <div className="h-full w-full bg-neutral-900">
@@ -93,7 +93,7 @@ export default function HeroCinematic() {
             <picture className="absolute inset-0 h-full w-full block">
               <source srcSet="/hero/hero-image.avif" type="image/avif" />
               <source srcSet="/hero/hero-image.webp" type="image/webp" />
-              <img loading="eager" fetchpriority="high"
+              <img loading="eager" fetchPriority="high"
                 src="/hero/hero-image.webp"
                 alt=""
                 aria-hidden="true"

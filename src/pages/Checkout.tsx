@@ -357,6 +357,15 @@ const Checkout = () => {
       return;
     }
 
+    // Build the item payload first — the idempotency signature below depends
+    // on it (and it must exist before any reference, per TDZ rules).
+    const itemsPayload = items.map((item: CheckoutCartItem) => ({
+      product_id: item.product.id,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
     // Bind the idempotency key to this exact cart+order. Reusing a stale key
     // for a *different* cart would replay the old order (wrong items/total
     // on the confirmation screen). Same contents -> same key (safe retry);
@@ -407,12 +416,6 @@ const Checkout = () => {
           throw new Error('Session expired. Please log in again.');
         }
       }
-      const itemsPayload = items.map((item: CheckoutCartItem) => ({
-        product_id: item.product.id,
-        quantity: item.quantity,
-        size: item.size,
-        color: item.color,
-      }));
 
       const rpcArgs: Record<string, unknown> = {
         p_items: itemsPayload,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Product } from '@/data/products';
 
 const STORAGE_KEY = 'recently_viewed';
@@ -17,19 +17,24 @@ export const useRecentlyViewed = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
   }, [ids]);
 
-  const addProduct = (product: Product) => {
+  // Stable identity + bail-out when nothing changed, so consumers can safely
+  // depend on this in effects without causing render loops.
+  const addProduct = useCallback((product: Product) => {
     setIds(prev => {
-      const filtered = prev.filter(id => id !== product.id);
-      return [product.id, ...filtered].slice(0, MAX_ITEMS);
+      const next = [product.id, ...prev.filter(id => id !== product.id)].slice(0, MAX_ITEMS);
+      if (prev.length === next.length && prev.every((id, index) => id === next[index])) {
+        return prev; // No change — keep the same reference to avoid re-renders
+      }
+      return next;
     });
-  };
+  }, []);
 
-  const getProducts = (allProducts: Product[]): Product[] => {
+  const getProducts = useCallback((allProducts: Product[]): Product[] => {
     if (!allProducts || allProducts.length === 0) return [];
     return ids
       .map(id => allProducts.find(p => p.id === id))
       .filter((p): p is Product => p !== undefined);
-  };
+  }, [ids]);
 
   return { addProduct, getProducts, ids };
 };

@@ -226,7 +226,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                 <Breadcrumb>
                   <BreadcrumbList>
                     {breadcrumbs.map((crumb, index) => (
-                      <Fragment key={crumb.path}>
+                      <Fragment key={`${index}-${crumb.path}`}>
                         {index > 0 && <BreadcrumbSeparator />}
                         <BreadcrumbItem>
                           {crumb.isLast ? (

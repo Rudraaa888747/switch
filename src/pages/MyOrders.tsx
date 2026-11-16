@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle, Clock, History, Package, Truck, Undo2, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle, Clock, History, Package, Truck, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/data/products';
 import { toast } from '@/hooks/use-toast';

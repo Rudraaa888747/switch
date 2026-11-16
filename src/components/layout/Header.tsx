@@ -147,6 +147,11 @@ const Header = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: premiumEase }}
     >
+      {/* Top scrim for the transparent header state: keeps logo/icons readable over any hero image */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-x-0 top-0 z-0 h-24 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-500 md:h-36 ${isHome && !scrolled ? 'opacity-100' : 'opacity-0'}`}
+      />
       <div className="safe-top relative z-10">
         <div className="container-custom">
           <div className="flex h-[var(--mobile-header-height)] items-center justify-between gap-2 md:h-20">
@@ -269,7 +274,7 @@ const Header = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.35, ease: premiumEase }}
-            className="overflow-hidden border-t border-border/60"
+            className="relative z-10 overflow-hidden border-t border-border/60"
           >
             <div className="container-custom py-3 md:py-4">
               <form onSubmit={handleSearchSubmit} className="relative">
